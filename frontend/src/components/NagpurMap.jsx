@@ -12,6 +12,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import SearchBar from "./SearchBar";
+import LocateButton from "./LocateButton";
 
 // Configure worker once before creating the map
 setWorkerUrl(workerUrl);
@@ -20,6 +21,7 @@ export default function NagpurMap() {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
   const selectedMarkerRef = useRef(null);
+  const currentLocationMarkerRef = useRef(null);
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
@@ -51,6 +53,10 @@ export default function NagpurMap() {
         selectedMarkerRef.current.remove();
         selectedMarkerRef.current = null;
       }
+      if (currentLocationMarkerRef.current) {
+        currentLocationMarkerRef.current.remove();
+        currentLocationMarkerRef.current = null;
+      }
       map.remove();
       mapRef.current = null;
     };
@@ -61,7 +67,7 @@ export default function NagpurMap() {
     if (!mapRef.current) return;
     const map = mapRef.current;
 
-    // 4. Select a result and move the map to it
+    // Move map to selected search result
     map.flyTo({
       center: coordinates,
       zoom: 15,
@@ -69,7 +75,7 @@ export default function NagpurMap() {
       duration: 1500,
     });
 
-    // 5. Place a marker at the selected location
+    // Place or update red search marker
     const props = feature.properties || {};
     const name = props.name || "Selected Location";
     const description = [props.street, props.district, props.city]
@@ -101,9 +107,50 @@ export default function NagpurMap() {
     }
   };
 
+  // Handle current location detection from Geolocation API
+  const handleCurrentLocationFound = ({ latitude, longitude, accuracy }) => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    const coordinates = [longitude, latitude];
+
+    // Center map on detected location
+    map.flyTo({
+      center: coordinates,
+      zoom: 15,
+      essential: true,
+      duration: 1500,
+    });
+
+    // Display blue current-location marker with accuracy popup
+    const popupContent = `
+      <div style="font-family: system-ui, sans-serif; padding: 4px;">
+        <div style="font-weight: 600; font-size: 14px; color: #1d4ed8;">Your Current Location</div>
+        <div style="font-size: 12px; color: #475569; margin-top: 2px;">Reported accuracy: &plusmn;${accuracy} meters</div>
+      </div>
+    `;
+
+    const popup = new Popup({ offset: 25 }).setHTML(popupContent);
+
+    if (currentLocationMarkerRef.current) {
+      currentLocationMarkerRef.current.setLngLat(coordinates).setPopup(popup);
+      if (!currentLocationMarkerRef.current.getPopup().isOpen()) {
+        currentLocationMarkerRef.current.togglePopup();
+      }
+    } else {
+      const marker = new Marker({ color: "#2563eb" })
+        .setLngLat(coordinates)
+        .setPopup(popup)
+        .addTo(map);
+
+      marker.togglePopup();
+      currentLocationMarkerRef.current = marker;
+    }
+  };
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
       <SearchBar onSelectLocation={handleSelectLocation} />
+      <LocateButton onLocationFound={handleCurrentLocationFound} />
       <div
         ref={mapContainer}
         style={{

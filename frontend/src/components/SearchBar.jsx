@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import "./SearchBar.css";
 
-// Nagpur center coordinates for Photon bias
-const NAGPUR_LAT = 21.1458;
-const NAGPUR_LON = 79.0882;
-const DEBOUNCE_DELAY_MS = 350;
+// Search configuration
+const DEBOUNCE_DELAY_MS = 400; // 350-500ms debounce
+const MIN_CHAR_THRESHOLD = 3;   // Minimum 3 typed characters
 
 export default function SearchBar({ onSelectLocation }) {
   const [query, setQuery] = useState("");
@@ -30,7 +29,8 @@ export default function SearchBar({ onSelectLocation }) {
 
   // Fetch suggestions from Photon API
   const fetchSuggestions = (searchQuery) => {
-    if (!searchQuery.trim()) {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < MIN_CHAR_THRESHOLD) {
       setSuggestions([]);
       setIsLoading(false);
       setIsOpen(false);
@@ -44,9 +44,15 @@ export default function SearchBar({ onSelectLocation }) {
 
     setIsLoading(true);
 
-    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(
-      searchQuery.trim()
-    )}&lat=${NAGPUR_LAT}&lon=${NAGPUR_LON}&limit=5`;
+    const params = new URLSearchParams({
+      q: trimmed,
+      lat: "21.1458",
+      lon: "79.0882",
+      limit: "5",
+      lang: "en",
+    });
+
+    const url = `https://photon.komoot.io/api/?${params.toString()}`;
 
     fetch(url, { signal: abortControllerRef.current.signal })
       .then((res) => {
@@ -54,7 +60,31 @@ export default function SearchBar({ onSelectLocation }) {
         return res.json();
       })
       .then((data) => {
-        const features = data.features || [];
+        const rawFeatures = data.features || [];
+
+        // Deduplicate features sharing the same name and nearby coordinates
+        const seen = new Set();
+        const features = rawFeatures
+          .filter((f) => {
+            const name = f.properties?.name || "";
+            const coords = (f.geometry?.coordinates || []).map((c) => c.toFixed(3)).join(",");
+            const key = `${name}-${coords}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .sort((a, b) => {
+            const isNagpurA =
+              a.properties?.city?.toLowerCase() === "nagpur" ||
+              a.properties?.county?.toLowerCase()?.includes("nagpur") ||
+              false;
+            const isNagpurB =
+              b.properties?.city?.toLowerCase() === "nagpur" ||
+              b.properties?.county?.toLowerCase()?.includes("nagpur") ||
+              false;
+            return (isNagpurB ? 1 : 0) - (isNagpurA ? 1 : 0);
+          });
+
         setSuggestions(features);
         setIsOpen(features.length > 0);
         setHighlightedIndex(-1);
@@ -70,7 +100,7 @@ export default function SearchBar({ onSelectLocation }) {
       });
   };
 
-  // Handle typing with debounce
+  // Handle typing with debounce & minimum character validation
   const handleInputChange = (e) => {
     const value = e.target.value;
     setQuery(value);
@@ -79,10 +109,13 @@ export default function SearchBar({ onSelectLocation }) {
       clearTimeout(debounceTimerRef.current);
     }
 
-    if (!value.trim()) {
+    if (value.trim().length < MIN_CHAR_THRESHOLD) {
       setSuggestions([]);
       setIsOpen(false);
       setIsLoading(false);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
       return;
     }
 
