@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import "./LocateButton.css";
 
-export default function LocateButton({ onLocationFound }) {
+export default function LocateButton({ onLocationFound, onGpsStatusChange }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const toastTimeoutRef = useRef(null);
@@ -31,11 +31,18 @@ export default function LocateButton({ onLocationFound }) {
     // Check if Geolocation is supported
     if (!navigator.geolocation) {
       showError("Geolocation is not supported by your browser.");
+      if (onGpsStatusChange) {
+        onGpsStatusChange({ status: "unavailable", accuracy: null });
+      }
       return;
     }
 
     setIsLoading(true);
     setErrorMessage(null);
+
+    if (onGpsStatusChange) {
+      onGpsStatusChange({ status: "detecting", accuracy: null });
+    }
 
     const options = {
       enableHighAccuracy: true,
@@ -46,35 +53,50 @@ export default function LocateButton({ onLocationFound }) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setIsLoading(false);
+        const accuracy = Math.round(position.coords.accuracy);
+
+        if (onGpsStatusChange) {
+          onGpsStatusChange({ status: "detected", accuracy });
+        }
+
         if (onLocationFound) {
           onLocationFound({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
-            accuracy: Math.round(position.coords.accuracy),
+            accuracy,
           });
         }
       },
       (error) => {
         setIsLoading(false);
-        let userMessage = "Unable to retrieve your location.";
+        let userMessage = "Unable to determine your current location. Check your device location services and try again.";
+        let gpsStatus = "unavailable";
 
         switch (error.code) {
           case error.PERMISSION_DENIED:
             userMessage =
-              "Location permission denied. Please allow location access in your browser settings to use this feature.";
+              "Location permission was denied. Allow location access in your browser settings to detect your current location.";
+            gpsStatus = "denied";
             break;
           case error.POSITION_UNAVAILABLE:
             userMessage =
-              "Location information is currently unavailable. Please verify your GPS or network connection.";
+              "Unable to determine your current location. Check your device location services and try again.";
+            gpsStatus = "unavailable";
             break;
           case error.TIMEOUT:
             userMessage =
-              "Location request timed out. Please try again.";
+              "Location detection is taking too long. Please try again.";
+            gpsStatus = "timeout";
             break;
           default:
             userMessage =
-              error.message || "An error occurred while finding your location.";
+              error.message || "Unable to determine your current location. Check your device location services and try again.";
+            gpsStatus = "unavailable";
             break;
+        }
+
+        if (onGpsStatusChange) {
+          onGpsStatusChange({ status: gpsStatus, accuracy: null });
         }
 
         showError(userMessage);
