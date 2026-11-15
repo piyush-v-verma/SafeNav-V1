@@ -2,21 +2,26 @@
  * SafeNav Centralized API Service Module
  * Handles HTTP communication with the SafeNav FastAPI backend.
  */
+import { supabase } from "./supabaseClient";
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 /**
+ * Get authorization header containing the current Supabase session JWT.
+ */
+export async function getAuthHeaders() {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  if (!token) return {};
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+/**
  * Check backend operational and road network graph health.
  * GET /api/health
- *
- * @param {number} timeoutMs - Request timeout in milliseconds (default: 5000)
- * @returns {Promise<{
- *   status: 'connected' | 'degraded' | 'disconnected',
- *   graphLoaded: boolean,
- *   data: object | null,
- *   error: string | null
- * }>}
  */
 export async function checkBackendHealth(timeoutMs = 5000) {
   const controller = new AbortController();
@@ -72,8 +77,6 @@ export async function checkBackendHealth(timeoutMs = 5000) {
 /**
  * Fetch road network graph statistics.
  * GET /api/graph/info
- *
- * @returns {Promise<object>}
  */
 export async function fetchGraphInfo() {
   const response = await fetch(`${API_BASE_URL}/api/graph/info`, {
@@ -89,20 +92,9 @@ export async function fetchGraphInfo() {
   return response.json();
 }
 
-
 /**
  * Check if GPS coordinates fall within the supported road network coverage area.
  * GET /api/location/coverage?latitude={latitude}&longitude={longitude}
- *
- * @param {number} latitude
- * @param {number} longitude
- * @returns {Promise<{
- *   latitude: number,
- *   longitude: number,
- *   supported: boolean,
- *   city: string | null,
- *   message: string
- * }>}
  */
 export async function checkLocationCoverage(latitude, longitude) {
   const url = `${API_BASE_URL}/api/location/coverage?latitude=${encodeURIComponent(
@@ -129,19 +121,15 @@ export async function checkLocationCoverage(latitude, longitude) {
 /**
  * Calculate mode-aware road-following route.
  * POST /api/navigation/route
- *
- * @param {object} params
- * @param {{ latitude: number, longitude: number }} params.origin
- * @param {{ latitude: number, longitude: number }} params.destination
- * @param {'car' | 'two_wheeler' | 'walking'} [params.mode='car']
- * @returns {Promise<object>}
  */
 export async function calculateRoute({ origin, destination, mode = "car" }) {
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${API_BASE_URL}/api/navigation/route`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
+      ...authHeaders,
     },
     body: JSON.stringify({ origin, destination, mode }),
   });
@@ -154,3 +142,23 @@ export async function calculateRoute({ origin, destination, mode = "car" }) {
   return response.json();
 }
 
+/**
+ * Fetch current authenticated user's profile from FastAPI backend.
+ * GET /api/v1/auth/me
+ */
+export async function fetchMyProfileBackend() {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+    headers: {
+      Accept: "application/json",
+      ...authHeaders,
+    },
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.detail || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+}

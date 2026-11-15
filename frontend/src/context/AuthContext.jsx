@@ -1,0 +1,186 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
+
+const AuthContext = createContext(null);
+
+export function AuthProvider({ children }) {
+  const [session, setSession] = useState(null);
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch PostgreSQL profile from public.profiles
+  const fetchProfile = async (userId, userEmail) => {
+    if (!isSupabaseConfigured || !userId) {
+      setProfile(null);
+      return null;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching profile:', error);
+      }
+
+      const userProfile = data || {
+        id: userId,
+        email: userEmail,
+        full_name: 'Citizen',
+        role: 'user',
+        account_status: 'active',
+      };
+      setProfile(userProfile);
+      return userProfile;
+    } catch (err) {
+      console.error('Failed to load user profile:', err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
+    // Initial session check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchProfile(session.user.id, session.user.email);
+      }
+      setLoading(false);
+    });
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        if (currentSession?.user) {
+          await fetchProfile(currentSession.user.id, currentSession.user.email);
+        } else {
+          setProfile(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const signIn = async (email, password) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured yet. Please configure frontend/.env first.');
+    }
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const signUp = async (email, password, { fullName, mobileNumber }) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured yet. Please configure frontend/.env first.');
+    }
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          mobile_number: mobileNumber,
+        },
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const signOut = async () => {
+    if (!isSupabaseConfigured) {
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      return;
+    }
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+    setSession(null);
+    setUser(null);
+    setProfile(null);
+  };
+
+  const resetPassword = async (email) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured yet.');
+    }
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const updatePassword = async (newPassword) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured yet.');
+    }
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const updateProfile = async ({ fullName, mobileNumber }) => {
+    if (!user) throw new Error('Not authenticated');
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        full_name: fullName,
+        mobile_number: mobileNumber,
+      })
+      .eq('id', user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    setProfile(data);
+    return data;
+  };
+
+  const value = {
+    session,
+    user,
+    profile,
+    loading,
+    isConfigured: isSupabaseConfigured,
+    signIn,
+    signUp,
+    signOut,
+    resetPassword,
+    updatePassword,
+    updateProfile,
+    refreshProfile: () => fetchProfile(user?.id, user?.email),
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}

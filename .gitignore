@@ -1,27 +1,38 @@
 # Python
 __pycache__/
 */__pycache__/
-*.pyc
+**/*.pyc
 *.py[cod]
 *$py.class
 .venv/
 backend/.venv/
+**/.venv/
 
-# Environment variables
+# Environment variables & secrets (keep .env.example templates)
 .env
-backend/.env
 *.env
+**/.env
+**/.env.*
+!**/.env.example
 
 # Cache
 cache/
 */cache/
 backend/data/cache/
+.pytest_cache/
+.ruff_cache/
 
-# Frontend
+# Node & Frontend dependencies
 node_modules/
 frontend/node_modules/
+admin-frontend/node_modules/
+**/node_modules/
+
+# Build artifacts
 dist/
 frontend/dist/
+admin-frontend/dist/
+**/dist/
 dist-ssr/
 *.local
 npm-debug.log*
@@ -34,3 +45,9 @@ backend/data/raw/*
 !backend/data/raw/nagpur_boundary.geojson
 backend/data/processed/*
 !backend/data/processed/.gitkeep
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
