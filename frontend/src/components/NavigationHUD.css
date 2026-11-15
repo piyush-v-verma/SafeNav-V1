@@ -1,0 +1,191 @@
+/* Google Maps-style Navigation HUD */
+
+/* Top Navigation Guidance Banner */
+.nav-hud-top {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: 90%;
+  max-width: 480px;
+  background: #0f766e; /* Deep emerald teal navigation green */
+  color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 4px 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  padding: 14px 18px;
+  gap: 16px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  animation: slideDownHUD 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideDownHUD {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.nav-hud-arrow-box {
+  width: 46px;
+  height: 46px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-hud-arrow-box svg {
+  width: 28px;
+  height: 28px;
+  stroke: #ffffff;
+}
+
+.nav-hud-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-hud-maneuver {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-hud-subtext {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.82);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Bottom Navigation Controls & Metrics Bar */
+.nav-hud-bottom {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: 90%;
+  max-width: 440px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  animation: slideUpHUD 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpHUD {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.nav-hud-metrics {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-hud-time-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.nav-hud-duration {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f766e;
+  line-height: 1;
+}
+
+.nav-hud-mode-pill {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.nav-hud-distance-row {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* Exit button */
+.nav-hud-exit-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.nav-hud-exit-btn:hover {
+  background: #fecaca;
+  color: #b91c1c;
+}
+
+.nav-hud-exit-btn:active {
+  transform: scale(0.96);
+}
+
+/* Recenter / Heading Lock Button (Floating above bottom bar) */
+.nav-hud-recenter-btn {
+  position: absolute;
+  bottom: 100px;
+  right: 20px;
+  z-index: 30;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563eb;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.nav-hud-recenter-btn:hover {
+  background: #f8fafc;
+  transform: scale(1.05);
+}

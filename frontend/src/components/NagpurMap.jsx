@@ -5,6 +5,7 @@ import {
   NavigationControl,
   Marker,
   Popup,
+  LngLatBounds,
   setWorkerUrl,
 } from "maplibre-gl";
 
@@ -14,18 +15,58 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import SearchBar from "./SearchBar";
 import LocateButton from "./LocateButton";
 import ConnectionStatus from "./ConnectionStatus";
-import { checkLocationCoverage } from "../services/api";
+import RoutePanel from "./RoutePanel";
+import NavigationHUD from "./NavigationHUD";
+import { checkLocationCoverage, calculateRoute } from "../services/api";
 
 // Configure worker once before creating the map
 setWorkerUrl(workerUrl);
+
+// Calculate forward azimuth bearing (degrees 0-360) between two coordinates [lon, lat]
+function calculateBearing([lon1, lat1], [lon2, lat2]) {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const toDeg = (rad) => (rad * 180) / Math.PI;
+
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const deltaLambda = toRad(lon2 - lon1);
+
+  const y = Math.sin(deltaLambda) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+
+  const theta = Math.atan2(y, x);
+  return (toDeg(theta) + 360) % 360;
+}
+
+// Extract initial forward heading:
+// If the user is off-road (e.g. inside a house/building with a dotted access line > 5m),
+// orient the camera straight along the dotted line towards the road!
+function getRouteInitialBearing(route) {
+  const accessCoords = route?.geometries?.origin_access?.coordinates;
+  const accessDist = route?.summary?.breakdown?.origin_access_distance_m || 0;
+
+  if (accessCoords && accessCoords.length >= 2 && accessDist > 5) {
+    return calculateBearing(accessCoords[0], accessCoords[1]);
+  }
+
+  const roadCoords = route?.geometries?.road_route?.coordinates;
+  if (roadCoords && roadCoords.length >= 2) {
+    return calculateBearing(roadCoords[0], roadCoords[1]);
+  }
+
+  return 0;
+}
 
 export default function NagpurMap() {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
   const selectedMarkerRef = useRef(null);
   const currentLocationMarkerRef = useRef(null);
+  const currentBearingRef = useRef(0);
 
-  // Preserve latest successful GPS reading for automated recovery
+  // Preserve latest successful GPS reading for automated recovery and routing
   const latestGpsCoordsRef = useRef(null);
   const isCoverageCheckingRef = useRef(false);
 
@@ -35,6 +76,15 @@ export default function NagpurMap() {
     accuracy: null,
   });
   const [coverageStatus, setCoverageStatus] = useState("unknown"); // 'unknown' | 'checking' | 'supported' | 'outside'
+
+  // Navigation & Route planning state
+  const [selectedDestination, setSelectedDestination] = useState(null);
+  const [isRoutePanelOpen, setIsRoutePanelOpen] = useState(false);
+  const [travelMode, setTravelMode] = useState("car"); // 'car' | 'two_wheeler' | 'walking'
+  const [routeData, setRouteData] = useState(null);
+  const [isRouteLoading, setIsRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState(null);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Handle GPS status updates from LocateButton
   const handleGpsStatusChange = ({ status, accuracy }) => {
@@ -79,12 +129,10 @@ export default function NagpurMap() {
   const handleBackendStatusChange = useCallback(
     (newStatus, prevStatus) => {
       if (newStatus === "connected" && prevStatus !== "connected") {
-        // Backend successfully recovered! Recalculate coverage using last known GPS reading
         if (latestGpsCoordsRef.current) {
           recalculateCoverage(latestGpsCoordsRef.current);
         }
       } else if (newStatus === "disconnected" || newStatus === "degraded") {
-        // Backend unavailable; road coverage is unknown
         setCoverageStatus("unknown");
         if (currentLocationMarkerRef.current && latestGpsCoordsRef.current) {
           const offlinePopup = new Popup({ offset: 25 }).setHTML(
@@ -97,6 +145,7 @@ export default function NagpurMap() {
     [recalculateCoverage]
   );
 
+  // Initialize MapLibre Map
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
@@ -107,13 +156,124 @@ export default function NagpurMap() {
       zoom: 12,
     });
 
-    map.addControl(
-      new NavigationControl(),
-      "top-right"
-    );
+    map.addControl(new NavigationControl(), "top-right");
 
     map.on("load", () => {
       console.log("Nagpur map loaded successfully!");
+
+      // Enforce flat 2D building footprints and eradicate 3D building extrusion
+      const enforceFlat2DBuildings = () => {
+        try {
+          const style = map.getStyle();
+          if (style && style.layers) {
+            style.layers.forEach((layer) => {
+              if (layer.type === "fill-extrusion" || layer.id === "building-3d") {
+                if (map.getLayer(layer.id)) {
+                  map.removeLayer(layer.id);
+                  console.log(`[SafeNav] Removed 3D extrusion layer: ${layer.id}`);
+                }
+              }
+            });
+          }
+
+          // Expand flat 'building' fill layer across all zoom levels up to 24
+          if (map.getLayer("building")) {
+            map.setLayerZoomRange("building", 13, 24);
+            map.setPaintProperty("building", "fill-color", "#e2e8f0");
+            map.setPaintProperty("building", "fill-opacity", 0.85);
+            map.setPaintProperty("building", "fill-outline-color", "#94a3b8");
+            console.log("[SafeNav] Flat 2D building footprints active (zooms 13-24).");
+          }
+        } catch (err) {
+          console.warn("[SafeNav] Building layer update notice:", err);
+        }
+      };
+
+      enforceFlat2DBuildings();
+      map.on("style.load", enforceFlat2DBuildings);
+
+      // Expose verification function on window for runtime auditing
+      if (typeof window !== "undefined") {
+        window.__safenav_verify_building_layers = () => {
+          const layers = map.getStyle()?.layers || [];
+          const extrusions = layers.filter((l) => l.type === "fill-extrusion");
+          const buildings = layers.filter(
+            (l) => l.id.includes("building") || l["source-layer"] === "building"
+          );
+          const report = {
+            fillExtrusionsActive: extrusions.map((l) => l.id),
+            flatBuildingsActive: buildings.map((l) => ({
+              id: l.id,
+              type: l.type,
+              minzoom: l.minzoom,
+              maxzoom: l.maxzoom,
+            })),
+            isExtrusionCompletelyRemoved: extrusions.length === 0,
+          };
+          console.log("[SafeNav Runtime Verification Report]:", report);
+          return report;
+        };
+      }
+
+      // 1. Add road route GeoJSON source and layers
+      if (!map.getSource("safenav-route-source")) {
+        map.addSource("safenav-route-source", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+
+        // Route casing / underlay for high contrast
+        map.addLayer({
+          id: "safenav-route-casing",
+          type: "line",
+          source: "safenav-route-source",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#0f172a",
+            "line-width": 8,
+            "line-opacity": 0.35,
+          },
+        });
+
+        // Main road-following route line (solid prominent blue)
+        map.addLayer({
+          id: "safenav-route-line",
+          type: "line",
+          source: "safenav-route-source",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#2563eb",
+            "line-width": 6,
+          },
+        });
+      }
+
+      // 2. Add access connection GeoJSON source and dotted line layer
+      if (!map.getSource("safenav-access-source")) {
+        map.addSource("safenav-access-source", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+
+        // Dotted access connection lines (dasharray: [2, 2])
+        map.addLayer({
+          id: "safenav-access-line",
+          type: "line",
+          source: "safenav-access-source",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": [
+              "match",
+              ["get", "type"],
+              "origin_access", "#2563eb",        // Blue dotted line from GPS to road
+              "destination_access", "#ef4444",   // Red dotted line from road to destination
+              "#2563eb"
+            ],
+            "line-width": 4,
+            "line-dasharray": [2, 2],
+          },
+        });
+      }
     });
 
     map.on("error", (event) => {
@@ -136,6 +296,284 @@ export default function NagpurMap() {
     };
   }, []);
 
+  // Compute road route via backend API
+  const triggerRouteCalculation = useCallback(
+    async (originCoords, destInfo, mode) => {
+      if (!originCoords || !destInfo) return;
+
+      setIsRouteLoading(true);
+      setRouteError(null);
+
+      try {
+        const res = await calculateRoute({
+          origin: {
+            latitude: originCoords.latitude,
+            longitude: originCoords.longitude,
+          },
+          destination: {
+            latitude: destInfo.coordinates[1],
+            longitude: destInfo.coordinates[0],
+          },
+          mode: mode,
+        });
+
+        setRouteData(res);
+
+        // Render both Access Connections and Road Route on MapLibre map
+        if (mapRef.current) {
+          const map = mapRef.current;
+          const routeSource = map.getSource("safenav-route-source");
+          const accessSource = map.getSource("safenav-access-source");
+
+          // 1. Dotted Access Connections
+          if (accessSource) {
+            const accessFeatures = [];
+            if (res.geometries?.origin_access) {
+              accessFeatures.push({
+                type: "Feature",
+                properties: { type: "origin_access" },
+                geometry: res.geometries.origin_access,
+              });
+            }
+            if (res.geometries?.destination_access) {
+              accessFeatures.push({
+                type: "Feature",
+                properties: { type: "destination_access" },
+                geometry: res.geometries.destination_access,
+              });
+            }
+            accessSource.setData({
+              type: "FeatureCollection",
+              features: accessFeatures,
+            });
+          }
+
+          // 2. Solid Road-Following Route
+          const roadGeom = res.geometries?.road_route || res.geometry;
+          if (routeSource && roadGeom) {
+            routeSource.setData({
+              type: "FeatureCollection",
+              features: [
+                {
+                  type: "Feature",
+                  geometry: roadGeom,
+                  properties: { mode: mode },
+                },
+              ],
+            });
+          }
+
+          // 3. Auto-fit map camera to include entire journey (access connections + road route)
+          const allCoords = [];
+          if (res.geometries?.origin_access?.coordinates) {
+            allCoords.push(...res.geometries.origin_access.coordinates);
+          }
+          if (roadGeom?.coordinates) {
+            allCoords.push(...roadGeom.coordinates);
+          }
+          if (res.geometries?.destination_access?.coordinates) {
+            allCoords.push(...res.geometries.destination_access.coordinates);
+          }
+
+          if (allCoords.length > 1) {
+            const bounds = allCoords.reduce(
+              (acc, c) => acc.extend(c),
+              new LngLatBounds(allCoords[0], allCoords[0])
+            );
+            map.fitBounds(bounds, {
+              padding: { top: 90, bottom: 90, left: 380, right: 60 },
+              duration: 1200,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Route calculation failed:", err);
+        setRouteError(err.message || "Failed to calculate road route.");
+        setRouteData(null);
+        if (mapRef.current) {
+          const routeSource = mapRef.current.getSource("safenav-route-source");
+          if (routeSource) {
+            routeSource.setData({ type: "FeatureCollection", features: [] });
+          }
+          const accessSource = mapRef.current.getSource("safenav-access-source");
+          if (accessSource) {
+            accessSource.setData({ type: "FeatureCollection", features: [] });
+          }
+        }
+      } finally {
+        setIsRouteLoading(false);
+      }
+    },
+    []
+  );
+
+  // Handle Directions button click from destination popup
+  const handleDirectionsClick = useCallback(
+    (destInfo) => {
+      setSelectedDestination(destInfo);
+      setIsRoutePanelOpen(true);
+      setIsNavigating(false);
+
+      if (latestGpsCoordsRef.current) {
+        triggerRouteCalculation(latestGpsCoordsRef.current, destInfo, travelMode);
+      } else {
+        setRouteError("Please detect your current GPS location first using the locate button.");
+      }
+    },
+    [travelMode, triggerRouteCalculation]
+  );
+
+  // Mode change handler (Car / Two-Wheeler / Walking)
+  const handleModeChange = (newMode) => {
+    setTravelMode(newMode);
+    setIsNavigating(false);
+    if (selectedDestination && latestGpsCoordsRef.current) {
+      triggerRouteCalculation(latestGpsCoordsRef.current, selectedDestination, newMode);
+    }
+  };
+
+  // Start active navigation session with rotated 3D perspective camera (Google Maps style)
+  const handleStartNavigation = () => {
+    setIsNavigating(true);
+    if (mapRef.current && latestGpsCoordsRef.current && routeData) {
+      const heading = getRouteInitialBearing(routeData);
+      currentBearingRef.current = heading;
+
+      mapRef.current.easeTo({
+        center: [latestGpsCoordsRef.current.longitude, latestGpsCoordsRef.current.latitude],
+        zoom: 18.2,
+        pitch: 55,         // 55 degree forward 3D perspective
+        bearing: heading,  // Aligned straight along the dotted line towards the road!
+        padding: { top: 140, bottom: 60, left: 0, right: 0 },
+        duration: 1500,
+      });
+    }
+  };
+
+  // Re-center camera and re-align bearing to forward route heading
+  const handleRecenterNavigation = () => {
+    if (mapRef.current && latestGpsCoordsRef.current && routeData) {
+      const heading = getRouteInitialBearing(routeData);
+      currentBearingRef.current = heading;
+
+      mapRef.current.easeTo({
+        center: [latestGpsCoordsRef.current.longitude, latestGpsCoordsRef.current.latitude],
+        zoom: 18.2,
+        pitch: 55,
+        bearing: heading,
+        padding: { top: 140, bottom: 60, left: 0, right: 0 },
+        duration: 1000,
+      });
+    }
+  };
+
+  // Exit active navigation session and restore top-down 2D map view
+  const handleExitNavigation = () => {
+    setIsNavigating(false);
+    currentBearingRef.current = 0;
+    if (mapRef.current) {
+      mapRef.current.easeTo({
+        pitch: 0,
+        bearing: 0,
+        zoom: 15,
+        padding: { top: 0, bottom: 0, left: 0, right: 0 },
+        duration: 1000,
+      });
+    }
+  };
+
+  // Close route panel and clear route
+  const handleCloseRoutePanel = () => {
+    setIsRoutePanelOpen(false);
+    setIsNavigating(false);
+    currentBearingRef.current = 0;
+    setRouteData(null);
+    setRouteError(null);
+
+    if (mapRef.current) {
+      const routeSource = mapRef.current.getSource("safenav-route-source");
+      if (routeSource) {
+        routeSource.setData({ type: "FeatureCollection", features: [] });
+      }
+      const accessSource = mapRef.current.getSource("safenav-access-source");
+      if (accessSource) {
+        accessSource.setData({ type: "FeatureCollection", features: [] });
+      }
+      mapRef.current.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+    }
+  };
+
+  // Construct destination popup DOM element with Directions button & coverage check
+  const createDestinationPopupElement = (destInfo) => {
+    const container = document.createElement("div");
+    container.style.fontFamily = "system-ui, -apple-system, sans-serif";
+    container.style.padding = "6px 4px";
+    container.style.minWidth = "200px";
+    container.style.maxWidth = "280px";
+
+    container.innerHTML = `
+      <div style="font-weight: 700; font-size: 14px; color: #0f172a;">${destInfo.name}</div>
+      ${
+        destInfo.description
+          ? `<div style="font-size: 12px; color: #64748b; margin-top: 3px; margin-bottom: 8px; line-height: 1.3;">${destInfo.description}</div>`
+          : ""
+      }
+      <div id="dest-coverage-slot" style="margin-bottom: 8px; font-size: 11px; color: #64748b;">
+        <span style="display:inline-block; width:6px; height:6px; background:#94a3b8; border-radius:50%; margin-right:4px;"></span>
+        Checking coverage...
+      </div>
+      <button id="dest-directions-btn" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; background: #2563eb; color: #ffffff; border: none; padding: 8px 12px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s ease; box-shadow: 0 2px 5px rgba(37,99,235,0.25);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+        </svg>
+        Directions
+      </button>
+    `;
+
+    const btn = container.querySelector("#dest-directions-btn");
+    btn.addEventListener("click", () => {
+      handleDirectionsClick(destInfo);
+    });
+
+    // Check coverage for destination coordinates [lon, lat]
+    checkLocationCoverage(destInfo.coordinates[1], destInfo.coordinates[0])
+      .then((coverage) => {
+        const slot = container.querySelector("#dest-coverage-slot");
+        if (!slot) return;
+        if (coverage.supported) {
+          slot.innerHTML = `
+            <span style="color: #059669; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+              <span style="display:inline-flex; align-items:center; justify-content:center; width:12px; height:12px; background:#10b981; color:#fff; border-radius:50%; font-size:9px;">&#10003;</span>
+              Inside Nagpur Coverage
+            </span>
+          `;
+        } else {
+          slot.innerHTML = `
+            <div style="color: #b45309; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">
+              <span style="display:inline-flex; align-items:center; justify-content:center; width:12px; height:12px; background:#f59e0b; color:#fff; border-radius:50%; font-size:9px;">!</span>
+              Outside Nagpur Coverage
+            </div>
+            <div style="font-size: 10px; color: #64748b; line-height: 1.3;">
+              Road navigation is only available within Nagpur limits.
+            </div>
+          `;
+          if (btn) {
+            btn.disabled = true;
+            btn.style.background = "#94a3b8";
+            btn.style.cursor = "not-allowed";
+            btn.style.boxShadow = "none";
+            btn.innerText = "Directions Unavailable";
+          }
+        }
+      })
+      .catch(() => {
+        const slot = container.querySelector("#dest-coverage-slot");
+        if (slot) slot.innerHTML = "";
+      });
+
+    return container;
+  };
+
   // Handle location selection from Photon search
   const handleSelectLocation = (coordinates, feature) => {
     if (!mapRef.current) return;
@@ -149,21 +587,20 @@ export default function NagpurMap() {
       duration: 1500,
     });
 
-    // Place or update red search marker
     const props = feature.properties || {};
     const name = props.name || "Selected Location";
     const description = [props.street, props.district, props.city]
       .filter(Boolean)
       .join(", ");
 
-    const popupContent = `
-      <div style="font-family: system-ui, sans-serif; padding: 4px;">
-        <div style="font-weight: 600; font-size: 14px; color: #0f172a;">${name}</div>
-        ${description ? `<div style="font-size: 12px; color: #64748b; margin-top: 2px;">${description}</div>` : ""}
-      </div>
-    `;
+    const destInfo = {
+      name,
+      description,
+      coordinates,
+    };
 
-    const popup = new Popup({ offset: 25 }).setHTML(popupContent);
+    const popupElement = createDestinationPopupElement(destInfo);
+    const popup = new Popup({ offset: 25 }).setDOMContent(popupElement);
 
     if (selectedMarkerRef.current) {
       selectedMarkerRef.current.setLngLat(coordinates).setPopup(popup);
@@ -228,20 +665,30 @@ export default function NagpurMap() {
     const map = mapRef.current;
     const coordinates = [longitude, latitude];
 
-    // Preserve latest valid GPS reading for automated recovery
+    // Preserve latest valid GPS reading
     latestGpsCoordsRef.current = { latitude, longitude, accuracy };
-
     setGpsState({ status: "detected", accuracy });
 
-    // Center map on detected location
-    map.flyTo({
-      center: coordinates,
-      zoom: 15,
-      essential: true,
-      duration: 1500,
-    });
+    // Center map or follow user during active navigation
+    if (isNavigating) {
+      map.easeTo({
+        center: coordinates,
+        bearing: currentBearingRef.current || 0,
+        pitch: 55,
+        zoom: 18.2,
+        padding: { top: 140, bottom: 60, left: 0, right: 0 },
+        duration: 800,
+      });
+    } else {
+      map.flyTo({
+        center: coordinates,
+        zoom: 15,
+        essential: true,
+        duration: 1500,
+      });
+    }
 
-    // Display blue current-location marker with initial loading state for coverage
+    // Display blue current-location marker
     const initialPopup = new Popup({ offset: 25 }).setHTML(
       createLocationPopupHTML(accuracy, null, true)
     );
@@ -278,6 +725,35 @@ export default function NagpurMap() {
         coverageStatus={coverageStatus}
         onBackendStatusChange={handleBackendStatusChange}
       />
+
+      {/* Route Planning Card (Visible before navigation starts) */}
+      {!isNavigating && isRoutePanelOpen && (
+        <RoutePanel
+          destination={selectedDestination}
+          origin={latestGpsCoordsRef.current}
+          route={routeData}
+          isLoading={isRouteLoading}
+          error={routeError}
+          travelMode={travelMode}
+          onModeChange={handleModeChange}
+          onStartNavigation={handleStartNavigation}
+          onExitNavigation={handleExitNavigation}
+          isNavigating={isNavigating}
+          onClose={handleCloseRoutePanel}
+        />
+      )}
+
+      {/* Google Maps-style Navigation HUD (Visible during active navigation) */}
+      {isNavigating && (
+        <NavigationHUD
+          route={routeData}
+          destination={selectedDestination}
+          travelMode={travelMode}
+          onExitNavigation={handleExitNavigation}
+          onRecenter={handleRecenterNavigation}
+        />
+      )}
+
       <div
         ref={mapContainer}
         style={{

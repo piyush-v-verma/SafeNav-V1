@@ -89,6 +89,7 @@ export async function fetchGraphInfo() {
   return response.json();
 }
 
+
 /**
  * Check if GPS coordinates fall within the supported road network coverage area.
  * GET /api/location/coverage?latitude={latitude}&longitude={longitude}
@@ -124,3 +125,32 @@ export async function checkLocationCoverage(latitude, longitude) {
 
   return response.json();
 }
+
+/**
+ * Calculate mode-aware road-following route.
+ * POST /api/navigation/route
+ *
+ * @param {object} params
+ * @param {{ latitude: number, longitude: number }} params.origin
+ * @param {{ latitude: number, longitude: number }} params.destination
+ * @param {'car' | 'two_wheeler' | 'walking'} [params.mode='car']
+ * @returns {Promise<object>}
+ */
+export async function calculateRoute({ origin, destination, mode = "car" }) {
+  const response = await fetch(`${API_BASE_URL}/api/navigation/route`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ origin, destination, mode }),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.detail || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+

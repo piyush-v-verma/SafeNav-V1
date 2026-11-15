@@ -31,5 +31,6 @@ yarn-error.log*
 # Generated road network data
 backend/data/raw/*
 !backend/data/raw/.gitkeep
+!backend/data/raw/nagpur_boundary.geojson
 backend/data/processed/*
 !backend/data/processed/.gitkeep
