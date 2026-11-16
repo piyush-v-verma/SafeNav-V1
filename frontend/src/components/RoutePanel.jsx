@@ -10,6 +10,8 @@ export default function RoutePanel({
   error,
   travelMode,
   onModeChange,
+  routePreference = "fastest",
+  onPreferenceChange,
   onStartNavigation,
   onExitNavigation,
   isNavigating,
@@ -87,6 +89,28 @@ export default function RoutePanel({
         >
           <Footprints size={16} strokeWidth={2.2} />
           <span>Walking</span>
+        </button>
+      </div>
+
+      {/* Route Preference Selector (Fastest vs Shortest) */}
+      <div className="route-pref-selector" role="radiogroup" aria-label="Route Preference">
+        <button
+          type="button"
+          className={`route-pref-pill ${routePreference === "fastest" ? "active" : ""}`}
+          onClick={() => onPreferenceChange && onPreferenceChange("fastest")}
+          disabled={isLoading || isNavigating}
+          title="Fastest Route: minimize estimated travel time"
+        >
+          <span>⚡ Fastest</span>
+        </button>
+        <button
+          type="button"
+          className={`route-pref-pill ${routePreference === "shortest" ? "active" : ""}`}
+          onClick={() => onPreferenceChange && onPreferenceChange("shortest")}
+          disabled={isLoading || isNavigating}
+          title="Shortest Route: minimize total physical distance"
+        >
+          <span>📏 Shortest</span>
         </button>
       </div>
 

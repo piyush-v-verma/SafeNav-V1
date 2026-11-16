@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, Optional
 import jwt
 from fastapi import HTTPException, status
-from backend.app.core.config import settings
+from app.core.config import settings
 
 logger = logging.getLogger("safenav.security")
 

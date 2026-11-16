@@ -3,8 +3,8 @@ from typing import Any, Dict, Optional
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from backend.app.core.security import decode_supabase_jwt
-from backend.app.db.supabase import get_supabase_client
+from app.core.security import decode_supabase_jwt
+from app.db.supabase import get_supabase_client
 
 logger = logging.getLogger("safenav.dependencies.auth")
 

@@ -11,8 +11,8 @@ import pyproj
 import shapely
 from shapely.geometry import LineString, Point
 
-from backend.app.core.config import settings
-from backend.app.api.router import api_v1_router, api_legacy_router
+from app.core.config import settings
+from app.api.router import api_v1_router, api_legacy_router
 
 # Configure logging
 logging.basicConfig(

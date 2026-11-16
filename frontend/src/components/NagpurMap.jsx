@@ -83,6 +83,7 @@ export default function NagpurMap() {
   const [selectedDestination, setSelectedDestination] = useState(null);
   const [isRoutePanelOpen, setIsRoutePanelOpen] = useState(false);
   const [travelMode, setTravelMode] = useState("car"); // 'car' | 'two_wheeler' | 'walking'
+  const [routePreference, setRoutePreference] = useState("fastest"); // 'fastest' | 'shortest'
   const [routeData, setRouteData] = useState(null);
   const [isRouteLoading, setIsRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState(null);
@@ -313,7 +314,7 @@ export default function NagpurMap() {
 
   // Compute road route via backend API
   const triggerRouteCalculation = useCallback(
-    async (originCoords, destInfo, mode) => {
+    async (originCoords, destInfo, mode, preference = "fastest") => {
       if (!originCoords || !destInfo) return;
 
       setIsRouteLoading(true);
@@ -330,6 +331,8 @@ export default function NagpurMap() {
             longitude: destInfo.coordinates[0],
           },
           mode: mode,
+          preference: preference,
+          route_preference: preference,
         });
 
         setRouteData(res);
@@ -430,12 +433,12 @@ export default function NagpurMap() {
       setIsNavigating(false);
 
       if (latestGpsCoordsRef.current) {
-        triggerRouteCalculation(latestGpsCoordsRef.current, destInfo, travelMode);
+        triggerRouteCalculation(latestGpsCoordsRef.current, destInfo, travelMode, routePreference);
       } else {
         setRouteError("Please detect your current GPS location first using the locate button.");
       }
     },
-    [travelMode, triggerRouteCalculation]
+    [travelMode, routePreference, triggerRouteCalculation]
   );
 
   // Mode change handler (Car / Two-Wheeler / Walking)
@@ -443,7 +446,16 @@ export default function NagpurMap() {
     setTravelMode(newMode);
     setIsNavigating(false);
     if (selectedDestination && latestGpsCoordsRef.current) {
-      triggerRouteCalculation(latestGpsCoordsRef.current, selectedDestination, newMode);
+      triggerRouteCalculation(latestGpsCoordsRef.current, selectedDestination, newMode, routePreference);
+    }
+  };
+
+  // Route preference handler (Fastest vs Shortest)
+  const handlePreferenceChange = (newPref) => {
+    setRoutePreference(newPref);
+    setIsNavigating(false);
+    if (selectedDestination && latestGpsCoordsRef.current) {
+      triggerRouteCalculation(latestGpsCoordsRef.current, selectedDestination, travelMode, newPref);
     }
   };
 
@@ -888,6 +900,8 @@ export default function NagpurMap() {
           error={routeError}
           travelMode={travelMode}
           onModeChange={handleModeChange}
+          routePreference={routePreference}
+          onPreferenceChange={handlePreferenceChange}
           onStartNavigation={handleStartNavigation}
           onExitNavigation={handleExitNavigation}
           isNavigating={isNavigating}

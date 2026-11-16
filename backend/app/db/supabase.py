@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 from supabase import Client, create_client
-from backend.app.core.config import settings
+from app.core.config import settings
 
 logger = logging.getLogger("safenav.supabase")
 

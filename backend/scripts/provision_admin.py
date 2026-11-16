@@ -24,10 +24,15 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-# Add backend directory to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+# Add backend directory to sys.path so app package can be imported
+backend_dir = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(backend_dir))
+sys.path.insert(0, str(backend_dir.parent))
 
-from backend.app.core.config import settings
+try:
+    from app.core.config import settings
+except ImportError:
+    from backend.app.core.config import settings
 from supabase import create_client
 
 

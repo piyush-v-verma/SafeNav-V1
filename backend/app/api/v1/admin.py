@@ -3,8 +3,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from backend.app.dependencies.auth import require_admin
-from backend.app.db.supabase import get_supabase_client
+from app.dependencies.auth import require_admin
+from app.db.supabase import get_supabase_client
 
 logger = logging.getLogger("safenav.api.admin")
 

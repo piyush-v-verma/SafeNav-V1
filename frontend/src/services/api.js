@@ -120,10 +120,22 @@ export async function checkLocationCoverage(latitude, longitude) {
 
 /**
  * Calculate mode-aware road-following route.
+ * Supports travel modes: 'car', 'motorcycle' (or 'two_wheeler'), 'walking'
+ * Supports route preferences: 'fastest', 'shortest'
  * POST /api/navigation/route
  */
-export async function calculateRoute({ origin, destination, mode = "car" }) {
+export async function calculateRoute({
+  origin,
+  destination,
+  mode = "car",
+  preference = "fastest",
+  transport_mode,
+  route_preference,
+}) {
   const authHeaders = await getAuthHeaders();
+  const effectiveMode = transport_mode || mode;
+  const effectivePref = route_preference || preference;
+
   const response = await fetch(`${API_BASE_URL}/api/navigation/route`, {
     method: "POST",
     headers: {
@@ -131,7 +143,14 @@ export async function calculateRoute({ origin, destination, mode = "car" }) {
       Accept: "application/json",
       ...authHeaders,
     },
-    body: JSON.stringify({ origin, destination, mode }),
+    body: JSON.stringify({
+      origin,
+      destination,
+      mode: effectiveMode,
+      transport_mode: effectiveMode,
+      preference: effectivePref,
+      route_preference: effectivePref,
+    }),
   });
 
   if (!response.ok) {

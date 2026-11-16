@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from shapely.geometry import Point
-from backend.app.services.routing_service import RouteRequest, compute_route
+from app.services.routing_service import RouteRequest, compute_route
 
 logger = logging.getLogger("safenav.api.navigation")
 

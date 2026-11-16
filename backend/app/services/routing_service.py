@@ -10,6 +10,7 @@ from shapely.ops import substring
 
 logger = logging.getLogger("safenav.services.routing")
 
+
 class LatLng(BaseModel):
     latitude: float = Field(..., ge=-90.0, le=90.0, description="WGS84 Latitude")
     longitude: float = Field(..., ge=-180.0, le=180.0, description="WGS84 Longitude")
@@ -18,43 +19,176 @@ class LatLng(BaseModel):
 class RouteRequest(BaseModel):
     origin: LatLng
     destination: LatLng
-    mode: str = Field(
-        "car",
-        description="Travel mode: 'car' (default), 'two_wheeler', or 'walking'",
+    mode: Optional[str] = Field(
+        None,
+        description="Travel mode: 'car' (default), 'motorcycle' (or 'two_wheeler'), or 'walking'",
+    )
+    transport_mode: Optional[str] = Field(
+        None,
+        description="Alias for mode: 'car', 'motorcycle', or 'walking'",
+    )
+    preference: Optional[str] = Field(
+        None,
+        description="Route preference: 'fastest' (default) or 'shortest'",
+    )
+    route_preference: Optional[str] = Field(
+        None,
+        description="Alias for preference: 'fastest' or 'shortest'",
     )
 
 
-PROVISIONAL_SPEEDS: Dict[str, Dict[str, float]] = {
+# Realistic urban road speeds in Nagpur / Indian cities (in km/h)
+SPEEDS_KMH: Dict[str, Dict[str, float]] = {
     "car": {
         "trunk": 50.0, "trunk_link": 40.0,
-        "primary": 35.0, "primary_link": 30.0,
-        "secondary": 28.0, "secondary_link": 25.0,
-        "tertiary": 22.0, "tertiary_link": 20.0,
+        "primary": 40.0, "primary_link": 30.0,
+        "secondary": 32.0, "secondary_link": 25.0,
+        "tertiary": 25.0, "tertiary_link": 20.0,
+        "unclassified": 20.0,
         "residential": 18.0,
         "living_street": 12.0,
-        "unclassified": 18.0,
+        "service": 10.0,
+        "road": 20.0,
     },
-    "two_wheeler": {
+    "motorcycle": {
         "trunk": 45.0, "trunk_link": 35.0,
-        "primary": 35.0, "primary_link": 30.0,
-        "secondary": 30.0, "secondary_link": 25.0,
-        "tertiary": 25.0, "tertiary_link": 20.0,
-        "residential": 20.0,
-        "living_street": 15.0,
-        "unclassified": 20.0,
+        "primary": 38.0, "primary_link": 30.0,
+        "secondary": 32.0, "secondary_link": 25.0,
+        "tertiary": 28.0, "tertiary_link": 22.0,
+        "unclassified": 25.0,
+        "residential": 24.0,
+        "living_street": 18.0,
+        "service": 15.0,
+        "road": 22.0,
     },
     "walking": {
-        "trunk": 1.0, "trunk_link": 1.0,
-        "primary": 3.0, "primary_link": 3.0,
-        "secondary": 4.5, "secondary_link": 4.5,
-        "tertiary": 4.5, "tertiary_link": 4.5,
+        "trunk": 4.5, "trunk_link": 4.5,
+        "primary": 4.8, "primary_link": 4.8,
+        "secondary": 4.8, "secondary_link": 4.8,
+        "tertiary": 4.8, "tertiary_link": 4.8,
+        "unclassified": 4.8,
         "residential": 5.0,
         "living_street": 5.0,
-        "unclassified": 4.5,
+        "service": 5.0,
+        "footway": 5.0,
+        "pedestrian": 5.0,
+        "path": 5.0,
+        "steps": 3.0,
+        "road": 4.8,
+    },
+}
+
+# Road suitability & friction multipliers for 'fastest' travel time optimization:
+# - Car: Severe traffic friction on narrow residential lanes and living streets; high efficiency on arterials.
+# - Motorcycle: High agility in residential streets and tertiary shortcuts; less affected by bottlenecks.
+# - Walking: Preference for quiet residential/living streets over noisy high-speed multi-lane trunk corridors.
+SUITABILITY_FASTEST: Dict[str, Dict[str, float]] = {
+    "car": {
+        "trunk": 1.0, "trunk_link": 1.05,
+        "primary": 1.02, "primary_link": 1.08,
+        "secondary": 1.08, "secondary_link": 1.12,
+        "tertiary": 1.15, "tertiary_link": 1.20,
+        "unclassified": 1.30,
+        "residential": 1.45,
+        "living_street": 1.80,
+        "service": 1.90,
+        "road": 1.30,
+    },
+    "motorcycle": {
+        "trunk": 1.0, "trunk_link": 1.02,
+        "primary": 1.0, "primary_link": 1.02,
+        "secondary": 1.02, "secondary_link": 1.04,
+        "tertiary": 1.04, "tertiary_link": 1.06,
+        "unclassified": 1.06,
+        "residential": 1.08,
+        "living_street": 1.12,
+        "service": 1.15,
+        "road": 1.06,
+    },
+    "walking": {
+        "living_street": 1.0,
+        "residential": 1.0,
+        "service": 1.0,
+        "footway": 1.0,
+        "pedestrian": 1.0,
+        "path": 1.0,
+        "unclassified": 1.02,
+        "tertiary": 1.05,
+        "secondary": 1.10,
+        "primary": 1.15,
+        "trunk": 1.25,
+        "road": 1.05,
     },
 }
 
 MAX_SNAPPING_DISTANCE_M = 300.0
+
+
+def is_edge_accessible(d: Dict[str, Any], mode: str) -> bool:
+    """
+    Check if a road edge is legally and physically accessible for the specified mode.
+    Evaluates OSM attributes: highway, access, motor_vehicle, motorcycle, motorcar, foot, layer, width.
+    """
+    hw = d.get("highway", "residential")
+    if isinstance(hw, list):
+        hw = hw[0]
+
+    # 1. Elevated layer check
+    layer = d.get("layer", 0)
+    try:
+        layer_int = int(layer)
+    except (ValueError, TypeError):
+        layer_int = 0
+
+    # 2. General access tag check
+    access = d.get("access", "yes")
+    if access in ("no", "private"):
+        # Explicit vehicle-specific override check
+        if mode == "car" and d.get("motor_vehicle") != "yes" and d.get("motorcar") != "yes":
+            return False
+        if mode == "motorcycle" and d.get("motorcycle") not in ("yes", "permissive") and d.get("motor_vehicle") != "yes":
+            return False
+        if mode == "walking" and d.get("foot") not in ("yes", "permissive"):
+            return False
+
+    # 3. Walking rules
+    if mode == "walking":
+        # Elevated flyovers / bypasses without pedestrian paths
+        if layer_int >= 1:
+            return False
+        if hw in ("motorway", "motorway_link"):
+            return False
+        if d.get("foot") == "no":
+            return False
+        return True
+
+    # 4. Vehicular (Car & Motorcycle) rules
+    if mode in ("car", "motorcycle"):
+        # Prohibited on pedestrian-only infrastructure
+        if hw in ("footway", "pedestrian", "path", "steps", "cycleway"):
+            return False
+        if d.get("motor_vehicle") == "no":
+            return False
+
+    # 5. Car-specific restrictions
+    if mode == "car":
+        if d.get("motorcar") == "no":
+            return False
+        # Width restriction: standard cars cannot pass narrow lanes with width < 2.5m
+        w_val = d.get("width")
+        if w_val:
+            try:
+                if float(str(w_val).split()[0]) < 2.5:
+                    return False
+            except (ValueError, TypeError):
+                pass
+
+    # 6. Motorcycle-specific restrictions
+    if mode == "motorcycle":
+        if d.get("motorcycle") == "no":
+            return False
+
+    return True
 
 
 def snap_coordinate_to_road(
@@ -69,41 +203,23 @@ def snap_coordinate_to_road(
 ) -> Optional[Dict[str, Any]]:
     """
     Project a coordinate onto the nearest eligible road edge using metric UTM Zone 44N.
-    Returns snapped coordinates, access distance, edge tuple, and projection fraction.
+    Filters candidate edges by mode accessibility to guarantee legitimate entrance.
     """
     pt_utm = Point(to_utm.transform(point_lon, point_lat))
 
-    # Query candidate edges within buffer radius
     buffer_box = pt_utm.buffer(MAX_SNAPPING_DISTANCE_M)
     candidate_indices = edge_tree.query(buffer_box)
 
     if len(candidate_indices) == 0:
-        # Fallback to absolute nearest edge
-        nearest_idx = edge_tree.nearest(pt_utm)
-        candidate_indices = [nearest_idx]
+        candidate_indices = [edge_tree.nearest(pt_utm)]
 
     best_idx = None
     min_dist = float("inf")
 
     for idx in candidate_indices:
         u, v, k, d = scc_edges[idx]
-        hw = d.get("highway", "residential")
-        if isinstance(hw, list):
-            hw = hw[0]
-
-        layer = d.get("layer", 0)
-        try:
-            layer_int = int(layer)
-        except (ValueError, TypeError):
-            layer_int = 0
-
-        # Mode accessibility filtering
-        if mode == "walking":
-            if layer_int >= 1 or hw in ("trunk", "trunk_link"):
-                continue
-        elif mode in ("car", "two_wheeler"):
-            if hw in ("footway", "pedestrian", "path", "steps"):
-                continue
+        if not is_edge_accessible(d, mode):
+            continue
 
         geom = edge_geoms_utm[idx]
         dist = geom.distance(pt_utm)
@@ -124,19 +240,25 @@ def snap_coordinate_to_road(
     total_geom_len = best_geom_utm.length
     proj_fraction = proj_dist / total_geom_len if total_geom_len > 0 else 0.0
 
+    raw_oneway = d.get("oneway", False)
+    is_oneway = str(raw_oneway).lower() in ("true", "1", "yes")
+
     return {
         "edge_tuple": (u, v, k, d),
         "access_distance_m": round(min_dist, 1),
         "snapped_coordinates": [round(snapped_lon, 6), round(snapped_lat, 6)],
         "proj_fraction": proj_fraction,
-        "is_oneway": d.get("oneway", False),
+        "is_oneway": is_oneway,
     }
 
 
 def compute_route(app_state, body: RouteRequest) -> Dict[str, Any]:
     """
-    Calculate a mode-aware route connecting actual GPS origin and destination
-    to the road graph via dotted access lines and a solid road-following route.
+    Calculate an independent mode- and preference-aware route:
+    Profiles:
+      - car_fastest / car_shortest
+      - motorcycle_fastest / motorcycle_shortest
+      - walking_fastest / walking_shortest
     """
     G = app_state.graph
     edge_tree = getattr(app_state, "edge_tree", None)
@@ -181,10 +303,22 @@ def compute_route(app_state, body: RouteRequest) -> Dict[str, Any]:
             detail="Destination coordinates fall outside the supported Nagpur road network area.",
         )
 
-    # 2. Mode validation
-    mode = body.mode.lower().strip()
-    if mode not in ("car", "two_wheeler", "walking"):
+    # 2. Mode and Preference normalization
+    raw_mode = (body.transport_mode or body.mode or "car").lower().strip()
+    if raw_mode in ("motorcycle", "bike", "two_wheeler", "moto"):
+        mode = "motorcycle"
+    elif raw_mode in ("walking", "walk", "pedestrian", "foot"):
+        mode = "walking"
+    else:
         mode = "car"
+
+    raw_pref = (body.route_preference or body.preference or "fastest").lower().strip()
+    if raw_pref in ("shortest", "distance", "short"):
+        preference = "shortest"
+    else:
+        preference = "fastest"
+
+    selected_profile = f"{mode}_{preference}"
 
     # 3. Independent metric edge snapping for origin and destination
     orig_snap = snap_coordinate_to_road(
@@ -219,41 +353,43 @@ def compute_route(app_state, body: RouteRequest) -> Dict[str, Any]:
             detail=f"No accessible road found within {int(MAX_SNAPPING_DISTANCE_M)}m of your destination position.",
         )
 
-    # 4. Mode-aware edge weight function
-    speed_map = PROVISIONAL_SPEEDS.get(mode, PROVISIONAL_SPEEDS["car"])
-    default_speed = 20.0 if mode != "walking" else 4.5
-
-    def edge_weight(u, v, edge_dict):
-        min_w = float("inf")
-        for k, d in edge_dict.items():
-            length = float(d.get("length", 10.0))
-            hw = d.get("highway", "residential")
-            if isinstance(hw, list):
-                hw = hw[0]
-            spd = speed_map.get(hw, default_speed)
-
-            layer = d.get("layer", 0)
-            try:
-                layer_int = int(layer)
-            except (ValueError, TypeError):
-                layer_int = 0
-
-            penalty = 1.0
-            if mode == "walking":
-                if layer_int >= 1 or hw in ("trunk", "trunk_link"):
-                    penalty = 20.0
-
-            time_cost = (length / (spd * (1000.0 / 3600.0))) * penalty
-            if time_cost < min_w:
-                min_w = time_cost
-        return min_w
-
-    # 5. Connect snapped points through road graph without mutating G
     u1, v1, k1, d1 = orig_snap["edge_tuple"]
     u2, v2, k2, d2 = dest_snap["edge_tuple"]
+    f_orig = orig_snap["proj_fraction"]
+    f_dest = dest_snap["proj_fraction"]
 
-    entry_node = v1
-    arrival_node = u2
+    # 4. Search graph: Walking uses zero-copy undirected view for bidirectional pedestrian movement
+    search_G = G.to_undirected(as_view=True) if mode == "walking" else G
+
+    # 5. Cost function for profile
+    speed_dict = SPEEDS_KMH[mode]
+    suit_dict = SUITABILITY_FASTEST[mode]
+    default_spd = 20.0 if mode != "walking" else 4.8
+    default_suit = 1.2 if mode == "car" else (1.05 if mode == "motorcycle" else 1.0)
+
+    def edge_cost(u, v, e_dict):
+        min_c = float("inf")
+        for k, d in e_dict.items():
+            if not is_edge_accessible(d, mode):
+                continue
+            seg_len = float(d.get("length", 10.0))
+            if preference == "shortest":
+                c = seg_len
+            else:
+                hw = d.get("highway", "residential")
+                if isinstance(hw, list):
+                    hw = hw[0]
+                spd = speed_dict.get(hw, default_spd)
+                speed_m_s = max(spd * (1000.0 / 3600.0), 0.5)
+                if mode == "walking":
+                    # Minimize pure pedestrian travel time
+                    c = seg_len / speed_m_s
+                else:
+                    suit = suit_dict.get(hw, default_suit)
+                    c = (seg_len / speed_m_s) * suit
+            if c < min_c:
+                min_c = c
+        return min_c
 
     def get_wgs_edge_geom(u, v, d):
         if "geometry" in d and hasattr(d["geometry"], "coords"):
@@ -267,105 +403,147 @@ def compute_route(app_state, body: RouteRequest) -> Dict[str, Any]:
 
     e1_geom_wgs = get_wgs_edge_geom(u1, v1, d1)
     e2_geom_wgs = get_wgs_edge_geom(u2, v2, d2)
+    len1 = float(d1.get("length", 10.0))
+    len2 = float(d2.get("length", 10.0))
 
-    f_orig = orig_snap["proj_fraction"]
-    f_dest = dest_snap["proj_fraction"]
+    # Helper for edge duration
+    def edge_duration_s(d_edge, length_m):
+        hw = d_edge.get("highway", "residential")
+        if isinstance(hw, list):
+            hw = hw[0]
+        spd = speed_dict.get(hw, default_spd)
+        return length_m / max(spd * (1000.0 / 3600.0), 0.5)
 
     road_coords: List[List[float]] = []
     road_distance_m = 0.0
     road_duration_s = 0.0
 
-    # Special case: Origin and destination snapped to the exact same edge in forward direction
-    if (u1, v1, k1) == (u2, v2, k2) and f_orig <= f_dest:
-        slice_geom = substring(
-            e1_geom_wgs,
-            f_orig * e1_geom_wgs.length,
-            f_dest * e1_geom_wgs.length,
-        )
-        road_coords = [[float(c[0]), float(c[1])] for c in slice_geom.coords]
-        seg_len = (f_dest - f_orig) * float(d1.get("length", 10.0))
-        road_distance_m = max(seg_len, 1.0)
-        hw1 = d1.get("highway", "residential")
-        if isinstance(hw1, list):
-            hw1 = hw1[0]
-        spd = speed_map.get(hw1, default_speed)
-        road_duration_s = road_distance_m / max(spd * (1000.0 / 3600.0), 0.5)
-    else:
-        # Lead-in road segment: snapped_orig -> entry_node (v1)
-        lead_in_slice = substring(
-            e1_geom_wgs,
-            f_orig * e1_geom_wgs.length,
-            e1_geom_wgs.length,
-        )
-        lead_in_coords = [[float(c[0]), float(c[1])] for c in lead_in_slice.coords]
-        lead_in_len = (1.0 - f_orig) * float(d1.get("length", 10.0))
-        road_distance_m += lead_in_len
-        hw1 = d1.get("highway", "residential")
-        if isinstance(hw1, list):
-            hw1 = hw1[0]
-        spd1 = speed_map.get(hw1, default_speed)
-        road_duration_s += lead_in_len / max(spd1 * (1000.0 / 3600.0), 0.5)
+    # Special Case: Origin and destination snapped to the exact same edge
+    if (u1, v1) == (u2, v2):
+        if f_orig <= f_dest:
+            slice_geom = substring(e1_geom_wgs, f_orig * e1_geom_wgs.length, f_dest * e1_geom_wgs.length)
+            road_coords = [[round(float(c[0]), 6), round(float(c[1]), 6)] for c in slice_geom.coords]
+            seg_len = max((f_dest - f_orig) * len1, 1.0)
+            road_distance_m = seg_len
+            road_duration_s = edge_duration_s(d1, seg_len)
+        elif not orig_snap["is_oneway"] or mode == "walking":
+            slice_geom = substring(e1_geom_wgs, f_dest * e1_geom_wgs.length, f_orig * e1_geom_wgs.length)
+            road_coords = [[round(float(c[0]), 6), round(float(c[1]), 6)] for c in reversed(list(slice_geom.coords))]
+            seg_len = max((f_orig - f_dest) * len1, 1.0)
+            road_distance_m = seg_len
+            road_duration_s = edge_duration_s(d1, seg_len)
 
-        # Main graph path: entry_node (v1) -> arrival_node (u2)
-        intermediate_coords: List[List[float]] = []
-        if entry_node != arrival_node:
-            try:
-                path = nx.shortest_path(
-                    G, source=entry_node, target=arrival_node, weight=edge_weight
-                )
-            except nx.NetworkXNoPath:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="No road path found between the snapped road locations.",
-                )
-            except Exception as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Route solver failed: {str(exc)}",
-                )
+    # General Case: Multi-edge routing with candidate entry and arrival nodes
+    if not road_coords:
+        # Candidate entry points at origin:
+        # - v1: forward along edge (always valid)
+        # - u1: reverse along edge (valid if two-way or walking)
+        entry_candidates = [(v1, (1.0 - f_orig) * len1, "forward")]
+        if not orig_snap["is_oneway"] or mode == "walking":
+            entry_candidates.append((u1, f_orig * len1, "reverse"))
 
-            for u, v in zip(path[:-1], path[1:]):
-                e_dict = G.get_edge_data(u, v)
-                key, e_data = min(
-                    e_dict.items(),
-                    key=lambda item: float(item[1].get("length", 10.0)),
-                )
-                seg_len = float(e_data.get("length", 10.0))
-                road_distance_m += seg_len
-                hw = e_data.get("highway", "residential")
-                if isinstance(hw, list):
-                    hw = hw[0]
-                spd = speed_map.get(hw, default_speed)
-                road_duration_s += seg_len / max(spd * (1000.0 / 3600.0), 0.5)
+        # Candidate arrival points at destination:
+        # - u2: forward into edge towards destination (always valid)
+        # - v2: reverse from end towards destination (valid if two-way or walking)
+        arrival_candidates = [(u2, f_dest * len2, "forward")]
+        if not dest_snap["is_oneway"] or mode == "walking":
+            arrival_candidates.append((v2, (1.0 - f_dest) * len2, "reverse"))
 
-                if "geometry" in e_data and hasattr(e_data["geometry"], "coords"):
-                    pts = [[float(c[0]), float(c[1])] for c in e_data["geometry"].coords]
+        best_score = float("inf")
+        best_path: Optional[List[Any]] = None
+        best_entry = None
+        best_arrival = None
+
+        for start_node, lead_in_m, start_dir in entry_candidates:
+            for end_node, lead_out_m, end_dir in arrival_candidates:
+                if start_node == end_node:
+                    candidate_path = [start_node]
+                    path_cost = 0.0
                 else:
-                    pts = [
-                        [float(G.nodes[u]["x"]), float(G.nodes[u]["y"])],
-                        [float(G.nodes[v]["x"]), float(G.nodes[v]["y"])],
-                    ]
-                for pt in pts:
-                    if not intermediate_coords or intermediate_coords[-1] != pt:
-                        intermediate_coords.append(pt)
+                    try:
+                        candidate_path = nx.shortest_path(
+                            search_G, source=start_node, target=end_node, weight=edge_cost
+                        )
+                        path_cost = sum(
+                            edge_cost(u, v, search_G.get_edge_data(u, v))
+                            for u, v in zip(candidate_path[:-1], candidate_path[1:])
+                        )
+                    except (nx.NetworkXNoPath, nx.NodeNotFound):
+                        continue
 
-        # Lead-out road segment: arrival_node (u2) -> snapped_dest
-        lead_out_slice = substring(
-            e2_geom_wgs,
-            0.0,
-            f_dest * e2_geom_wgs.length,
-        )
-        lead_out_coords = [[float(c[0]), float(c[1])] for c in lead_out_slice.coords]
-        lead_out_len = f_dest * float(d2.get("length", 10.0))
+                lead_in_dur = edge_duration_s(d1, lead_in_m)
+                lead_out_dur = edge_duration_s(d2, lead_out_m)
+
+                if preference == "shortest":
+                    total_candidate_cost = lead_in_m + path_cost + lead_out_m
+                else:
+                    total_candidate_cost = lead_in_dur + path_cost + lead_out_dur
+
+                if total_candidate_cost < best_score:
+                    best_score = total_candidate_cost
+                    best_path = candidate_path
+                    best_entry = (start_node, lead_in_m, start_dir)
+                    best_arrival = (end_node, lead_out_m, end_dir)
+
+        if not best_path or best_entry is None or best_arrival is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No accessible road route found between origin and destination for profile '{selected_profile}'.",
+            )
+
+        # 6. Reconstruct continuous, gapless route geometry
+        # A) Lead-in segment
+        entry_node, lead_in_len, entry_dir = best_entry
+        road_distance_m += lead_in_len
+        road_duration_s += edge_duration_s(d1, lead_in_len)
+
+        if entry_dir == "forward":
+            slice_in = substring(e1_geom_wgs, f_orig * e1_geom_wgs.length, e1_geom_wgs.length)
+            lead_in_pts = [[round(float(c[0]), 6), round(float(c[1]), 6)] for c in slice_in.coords]
+        else:
+            slice_in = substring(e1_geom_wgs, 0.0, f_orig * e1_geom_wgs.length)
+            lead_in_pts = [[round(float(c[0]), 6), round(float(c[1]), 6)] for c in reversed(list(slice_in.coords))]
+
+        # B) Intermediate path edges
+        intermediate_pts: List[List[float]] = []
+        for u, v in zip(best_path[:-1], best_path[1:]):
+            e_dict = search_G.get_edge_data(u, v)
+            best_k, best_d = min(e_dict.items(), key=lambda it: float(it[1].get("length", 10.0)))
+            seg_len = float(best_d.get("length", 10.0))
+            road_distance_m += seg_len
+            road_duration_s += edge_duration_s(best_d, seg_len)
+
+            if "geometry" in best_d and hasattr(best_d["geometry"], "coords"):
+                raw_coords = [[round(float(c[0]), 6), round(float(c[1]), 6)] for c in best_d["geometry"].coords]
+            else:
+                raw_coords = [
+                    [round(float(G.nodes[u]["x"]), 6), round(float(G.nodes[u]["y"]), 6)],
+                    [round(float(G.nodes[v]["x"]), 6), round(float(G.nodes[v]["y"]), 6)],
+                ]
+
+            # Orient coordinates along traversal direction
+            if not G.has_edge(u, v):
+                # Reverse traversal in undirected view
+                raw_coords = list(reversed(raw_coords))
+
+            for pt in raw_coords:
+                if not intermediate_pts or intermediate_pts[-1] != pt:
+                    intermediate_pts.append(pt)
+
+        # C) Lead-out segment
+        arrival_node, lead_out_len, arrival_dir = best_arrival
         road_distance_m += lead_out_len
-        hw2 = d2.get("highway", "residential")
-        if isinstance(hw2, list):
-            hw2 = hw2[0]
-        spd2 = speed_map.get(hw2, default_speed)
-        road_duration_s += lead_out_len / max(spd2 * (1000.0 / 3600.0), 0.5)
+        road_duration_s += edge_duration_s(d2, lead_out_len)
 
-        raw_road = lead_in_coords + intermediate_coords + lead_out_coords
-        for pt in raw_road:
+        if arrival_dir == "forward":
+            slice_out = substring(e2_geom_wgs, 0.0, f_dest * e2_geom_wgs.length)
+            lead_out_pts = [[round(float(c[0]), 6), round(float(c[1]), 6)] for c in slice_out.coords]
+        else:
+            slice_out = substring(e2_geom_wgs, f_dest * e2_geom_wgs.length, e2_geom_wgs.length)
+            lead_out_pts = [[round(float(c[0]), 6), round(float(c[1]), 6)] for c in reversed(list(slice_out.coords))]
+
+        raw_all = lead_in_pts + intermediate_pts + lead_out_pts
+        for pt in raw_all:
             if not road_coords or road_coords[-1] != pt:
                 road_coords.append(pt)
 
@@ -388,24 +566,36 @@ def compute_route(app_state, body: RouteRequest) -> Dict[str, Any]:
     dest_access_dist = dest_snap["access_distance_m"]
     total_distance_m = orig_access_dist + road_distance_m + dest_access_dist
 
-    access_time_s = (orig_access_dist + dest_access_dist) / 1.25
+    # Access walking speed ~1.33 m/s (4.8 km/h)
+    access_time_s = (orig_access_dist + dest_access_dist) / 1.33
     total_duration_s = road_duration_s + access_time_s
     total_duration_min = max(round(total_duration_s / 60.0), 1)
 
     advisory = None
     if mode == "walking":
         advisory = (
-            "Sidewalks and pedestrian paths are not mapped on this road network. "
-            "Route follows vehicular streets. Exercise caution."
+            "Sidewalks and pedestrian paths are followed where available. "
+            "Route uses vehicular streets and crossings with caution."
         )
+    elif mode == "car" and preference == "shortest":
+        advisory = "Shortest route may include narrow residential roads. Exercise caution when passing."
+
+    # External legacy representation compatibility
+    external_mode = "two_wheeler" if mode == "motorcycle" else mode
 
     return {
         "status": "success",
-        "mode": mode,
+        "mode": external_mode,
+        "transport_mode": mode,
+        "preference": preference,
+        "route_preference": preference,
+        "routing_profile": selected_profile,
+        "profile": selected_profile,
         "summary": {
             "total_distance_meters": round(total_distance_m, 1),
             "total_distance_km": round(total_distance_m / 1000.0, 2),
             "total_duration_minutes": total_duration_min,
+            "total_duration_seconds": round(total_duration_s, 1),
             "breakdown": {
                 "origin_access_distance_m": orig_access_dist,
                 "road_route_distance_m": round(road_distance_m, 1),
@@ -414,6 +604,10 @@ def compute_route(app_state, body: RouteRequest) -> Dict[str, Any]:
                 "access_duration_seconds": round(access_time_s, 1),
             },
         },
+        "distance_m": round(total_distance_m, 1),
+        "distance_km": round(total_distance_m / 1000.0, 2),
+        "duration_s": round(total_duration_s, 1),
+        "duration_min": total_duration_min,
         "snapping": {
             "origin": {
                 "original_coordinates": [body.origin.longitude, body.origin.latitude],
