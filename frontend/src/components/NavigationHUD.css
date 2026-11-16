@@ -77,11 +77,11 @@
 .nav-hud-bottom-row {
   position: absolute;
   bottom: 50px;
-  right: calc(48px + 46px + 10px); /* 104px: placed immediately adjacent to MapControls on the right */
+  right: calc(48px + 46px + 22px); /* 116px: clear spacing between Zoom Out and the circular Recenter button */
   z-index: 30;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   pointer-events: none;
   animation: slideInHUDRight 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -186,7 +186,7 @@
   height: 46px;
   min-width: 46px;
   min-height: 46px;
-  border-radius: 12px;
+  border-radius: 50%;
   background-color: #ffffff;
   border: 1px solid #cbd5e1;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16), 0 1px 3px rgba(15, 23, 42, 0.08);
@@ -216,7 +216,7 @@
 
 @media (max-width: 767px) and (orientation: portrait), (max-width: 539px) {
   .nav-hud-bottom-row {
-    right: calc(36px + 46px + 10px);
+    right: calc(36px + 46px + 16px);
     bottom: calc(var(--safenav-bottom-nav-height, 64px) + 44px + env(safe-area-inset-bottom, 0px));
     max-width: calc(100vw - 100px);
   }
