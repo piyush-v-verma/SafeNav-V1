@@ -56,37 +56,40 @@ export default function NavigationHUD({
         </div>
       </div>
 
-      {/* Re-center & Re-align Camera Button */}
-      <button
-        className="nav-hud-recenter-btn"
-        onClick={onRecenter}
-        title="Re-center & align with heading"
-        aria-label="Re-center navigation camera"
-      >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
-        </svg>
-      </button>
+      {/* Bottom Navigation Dock: Info & Exit Field + Recenter Button */}
+      <div className="nav-hud-bottom-row">
+        {/* Bottom Metrics and Exit Bar */}
+        <div className="nav-hud-bottom">
+          <div className="nav-hud-metrics">
+            <div className="nav-hud-time-row">
+              <span className="nav-hud-duration">{totalMin} min</span>
+              <span className="nav-hud-mode-pill">{modeIcon}</span>
+            </div>
+            <div className="nav-hud-distance-row">
+              <span>{totalKm} km remaining</span>
+            </div>
+          </div>
 
-      {/* Bottom Metrics and Exit Bar */}
-      <div className="nav-hud-bottom">
-        <div className="nav-hud-metrics">
-          <div className="nav-hud-time-row">
-            <span className="nav-hud-duration">{totalMin} min</span>
-            <span className="nav-hud-mode-pill">{modeIcon}</span>
-          </div>
-          <div className="nav-hud-distance-row">
-            <span>{totalKm} km remaining</span>
-          </div>
+          <button
+            className="nav-hud-exit-btn"
+            onClick={onExitNavigation}
+            aria-label="Exit navigation"
+          >
+            <X size={15} strokeWidth={2.4} />
+            <span>Exit</span>
+          </button>
         </div>
 
+        {/* Re-center & Re-align Camera Button (Placed between Info & Exit and Zoom Out) */}
         <button
-          className="nav-hud-exit-btn"
-          onClick={onExitNavigation}
-          aria-label="Exit navigation"
+          className="nav-hud-recenter-btn"
+          onClick={onRecenter}
+          title="Re-center & align with heading"
+          aria-label="Re-center navigation camera"
         >
-          <X size={15} strokeWidth={2.4} />
-          <span>Exit</span>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+          </svg>
         </button>
       </div>
     </>

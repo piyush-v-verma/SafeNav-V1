@@ -73,15 +73,35 @@
   text-overflow: ellipsis;
 }
 
-/* Bottom Navigation Controls & Metrics Bar */
-.nav-hud-bottom {
+/* Bottom Navigation Controls & Metrics Dock (Docked to the bottom-right, aligned with Zoom Out button) */
+.nav-hud-bottom-row {
   position: absolute;
-  bottom: 24px;
-  left: 20px;
-  transform: none;
+  bottom: 50px;
+  right: calc(48px + 46px + 10px); /* 104px: placed immediately adjacent to MapControls on the right */
   z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  animation: slideInHUDRight 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInHUDRight {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.nav-hud-bottom {
+  pointer-events: auto;
+  position: static;
   width: auto;
-  max-width: min(320px, calc(100vw - 40px));
+  max-width: min(320px, calc(100vw - 170px));
   background: rgba(255, 255, 255, 0.98);
   backdrop-filter: blur(10px);
   border: 1px solid #e2e8f0;
@@ -93,19 +113,7 @@
   justify-content: space-between;
   gap: 16px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  animation: slideUpHUDLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
-}
-
-@keyframes slideUpHUDLeft {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .nav-hud-metrics {
@@ -170,35 +178,61 @@
   transform: scale(0.96);
 }
 
-/* Recenter / Heading Lock Button (Floating above bottom bar) */
+/* Recenter / Heading Lock Button (Placed between Info & Exit and Zoom Out) */
 .nav-hud-recenter-btn {
-  position: absolute;
-  bottom: 100px;
-  right: 20px;
-  z-index: 30;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: #ffffff;
+  pointer-events: auto;
+  position: static;
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  min-height: 46px;
+  border-radius: 12px;
+  background-color: #ffffff;
   border: 1px solid #cbd5e1;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16), 0 1px 3px rgba(15, 23, 42, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #2563eb;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0;
+  outline: none;
+  flex-shrink: 0;
 }
 
 .nav-hud-recenter-btn:hover {
-  background: #f8fafc;
-  transform: scale(1.05);
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.22);
+  transform: translateY(-1px);
 }
 
-@media (max-width: 767px) {
+.nav-hud-recenter-btn:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
+}
+
+@media (max-width: 767px) and (orientation: portrait), (max-width: 539px) {
+  .nav-hud-bottom-row {
+    right: calc(36px + 46px + 10px);
+    bottom: calc(var(--safenav-bottom-nav-height, 64px) + 44px + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100vw - 100px);
+  }
+
   .nav-hud-bottom {
-    bottom: 20px;
-    left: 16px;
-    max-width: calc(100vw - 32px);
+    max-width: calc(100vw - 150px);
+    padding: 8px 12px;
+    gap: 10px;
+  }
+
+  .nav-hud-duration {
+    font-size: 20px;
+  }
+
+  .nav-hud-exit-btn {
+    padding: 6px 10px;
+    font-size: 12px;
   }
 }
