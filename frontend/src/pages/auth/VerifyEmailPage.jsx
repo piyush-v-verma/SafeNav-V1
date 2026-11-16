@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { Mail, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
 import { getAuthErrorMessage } from '../../services/authErrors';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../../../shared/toast/ToastProvider';
@@ -20,8 +21,8 @@ export default function VerifyEmailPage() {
     if (!email.trim() || resending) return;
     setResending(true);
     try {
-      await resendSignUpVerification(email);
-      toast.success('Verification email sent. Check your inbox.');
+      await resendSignUpVerification(email.trim());
+      toast.success('Verification email sent. Please check your inbox.');
     } catch (error) {
       const message = getAuthErrorMessage(error);
       toast.error(message);
@@ -31,54 +32,103 @@ export default function VerifyEmailPage() {
   };
 
   return (
-    <div style={{
-      width: '100%',
-      maxWidth: '440px',
-      background: '#1e293b',
-      border: '1px solid #334155',
-      borderRadius: '12px',
-      padding: '36px 28px',
-      textAlign: 'center',
-      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)'
-    }}>
-      <div style={{
-        width: '64px',
-        height: '64px',
-        borderRadius: '50%',
-        background: 'rgba(56, 189, 248, 0.1)',
-        color: '#38bdf8',
-        fontSize: '32px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        margin: '0 auto 20px'
-      }}>
-        ✉️
+    <div className="auth-page-wrapper">
+      <div className="auth-card">
+        {/* Header Badge */}
+        <div className="auth-header">
+          <div
+            className="auth-badge"
+            style={{
+              background: verified
+                ? '#16a34a'
+                : callbackError
+                ? '#dc2626'
+                : '#1a6cff',
+            }}
+          >
+            {verified ? (
+              <CheckCircle size={28} strokeWidth={2.4} />
+            ) : callbackError ? (
+              <AlertCircle size={28} strokeWidth={2.4} />
+            ) : (
+              <Mail size={28} strokeWidth={2.4} />
+            )}
+          </div>
+          <h1 className="auth-title">
+            {callbackError ? 'Verification Issue' : verified ? 'Email Verified!' : 'Check Your Email'}
+          </h1>
+          <p className="auth-subtitle">
+            {callbackError
+              ? getAuthErrorMessage({
+                  code: params.get('error_code'),
+                  message: params.get('error_description') || params.get('error'),
+                })
+              : verified
+              ? 'Your email is verified and your SafeNav profile is active.'
+              : 'We sent a verification link to your email address. Please click it to activate your account.'}
+          </p>
+        </div>
+
+        {verified ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px' }}>
+            <Link
+              to="/"
+              className="auth-btn-primary"
+              style={{
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxSizing: 'border-box',
+              }}
+            >
+              Continue to SafeNav
+            </Link>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '8px' }}>
+            {isConfigured && (
+              <form onSubmit={handleResend} className="auth-form">
+                <div className="auth-field-group">
+                  <label htmlFor="verification-email" className="auth-label">
+                    Didn't receive the email? Resend link:
+                  </label>
+                  <div className="auth-input-container">
+                    <span className="auth-input-icon">
+                      <Mail size={18} />
+                    </span>
+                    <input
+                      id="verification-email"
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="Enter your email address"
+                      autoComplete="email"
+                      className="auth-input"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={resending || !email.trim()}
+                  className="auth-btn-primary"
+                >
+                  {resending ? 'Sending Email...' : 'Resend Verification Email'}
+                </button>
+              </form>
+            )}
+
+            <div style={{ textAlign: 'center', marginTop: '8px' }}>
+              <Link to="/login" className="auth-back-link">
+                <ArrowLeft size={16} />
+                <span>Return to Sign In</span>
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
-
-      <h1 style={{ margin: '0 0 10px', fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc' }}>
-        {callbackError ? 'Verification Link Issue' : verified ? 'Email Verified' : 'Check Your Email'}
-      </h1>
-      <p style={{ margin: '0 0 24px', fontSize: '0.9rem', color: '#94a3b8', lineHeight: 1.5 }}>
-        {callbackError
-          ? getAuthErrorMessage({ code: params.get('error_code'), message: params.get('error_description') || params.get('error') })
-          : verified
-            ? 'Your email is verified and you are signed in. Continue to SafeNav navigation.'
-            : 'We have sent an account verification link to your email address. Please click the link inside to activate your SafeNav citizen profile.'}
-      </p>
-
-      {verified ? (
-        <Link to="/" className="auth-link">Continue to SafeNav</Link>
-      ) : (
-        <>
-          {isConfigured && <form onSubmit={handleResend} style={{ display: 'grid', gap: 10, marginBottom: 18, textAlign: 'left' }}>
-            <label htmlFor="verification-email" style={{ color: '#cbd5e1', fontSize: '0.85rem' }}>Resend verification email</label>
-            <input id="verification-email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" autoComplete="email" style={{ minHeight: 44, boxSizing: 'border-box', padding: '10px 12px', borderRadius: 6, border: '1px solid #475569', background: '#0f172a', color: '#f8fafc' }} />
-            <button type="submit" disabled={resending} style={{ minHeight: 44, border: '1px solid #475569', borderRadius: 6, background: '#334155', color: '#f8fafc', fontWeight: 600, cursor: resending ? 'wait' : 'pointer' }}>{resending ? 'Sending…' : 'Resend Verification Email'}</button>
-          </form>}
-          <Link to="/login" className="auth-link">Continue to Login</Link>
-        </>
-      )}
     </div>
   );
 }
