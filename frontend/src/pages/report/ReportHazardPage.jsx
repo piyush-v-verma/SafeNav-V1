@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Camera,
+  FolderOpen,
+  UploadCloud,
   Image as ImageIcon,
   MapPin,
   RefreshCw,
@@ -100,9 +102,11 @@ export default function ReportHazardPage() {
     );
   };
 
-  // Handle image file selection
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
+  // Single upload dropzone state
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Common file processing logic
+  const processFile = (file) => {
     if (!file) return;
 
     setFormError(null);
@@ -136,6 +140,34 @@ export default function ReportHazardPage() {
     // Reset inputs
     if (cameraInputRef.current) cameraInputRef.current.value = "";
     if (galleryInputRef.current) galleryInputRef.current.value = "";
+  };
+
+  // Handle image file selection from inputs
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      processFile(file);
+    }
   };
 
   // Remove selected image
@@ -342,30 +374,62 @@ export default function ReportHazardPage() {
               />
 
               {!imagePreview ? (
-                <div className="photo-picker-deck">
-                  <button
-                    type="button"
-                    className="photo-btn camera-btn"
-                    onClick={() => cameraInputRef.current?.click()}
-                  >
-                    <div className="photo-btn-icon-wrap camera-icon-bg">
-                      <Camera size={26} strokeWidth={2.2} />
-                    </div>
-                    <span className="photo-btn-title">Take Photo</span>
-                    <span className="photo-btn-desc">Open device camera</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="photo-btn gallery-btn"
+                <div className="single-upload-container">
+                  {/* Single Image Upload Field */}
+                  <div
+                    className={`single-upload-dropzone ${isDragging ? "dragging" : ""}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
                     onClick={() => galleryInputRef.current?.click()}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        galleryInputRef.current?.click();
+                      }
+                    }}
+                    aria-label="Upload road issue photograph"
                   >
-                    <div className="photo-btn-icon-wrap gallery-icon-bg">
-                      <ImageIcon size={26} strokeWidth={2.2} />
+                    <div className="upload-dropzone-icon">
+                      <UploadCloud size={30} strokeWidth={2.2} />
                     </div>
-                    <span className="photo-btn-title">Upload Image</span>
-                    <span className="photo-btn-desc">Browse files or gallery</span>
-                  </button>
+                    <div className="upload-dropzone-text">
+                      <span className="upload-dropzone-title">Upload road issue photo</span>
+                      <span className="upload-dropzone-sub">
+                        Click or drag & drop photo here
+                      </span>
+                      <span className="upload-dropzone-meta">
+                        JPEG, PNG, WebP &bull; Max 15 MB
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Two Options Below */}
+                  <div className="upload-options-row">
+                    <button
+                      type="button"
+                      className="upload-option-btn camera-option"
+                      onClick={() => cameraInputRef.current?.click()}
+                    >
+                      <div className="option-icon-wrap camera-wrap">
+                        <Camera size={18} strokeWidth={2.2} />
+                      </div>
+                      <span>Open Camera</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="upload-option-btn files-option"
+                      onClick={() => galleryInputRef.current?.click()}
+                    >
+                      <div className="option-icon-wrap files-wrap">
+                        <FolderOpen size={18} strokeWidth={2.2} />
+                      </div>
+                      <span>Select Files</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 /* Image Preview Card */
