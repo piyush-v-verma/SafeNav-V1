@@ -10,6 +10,7 @@ export default function ConnectionStatus({
   gpsAccuracy = null,
   coverageStatus = "unknown",
   onBackendStatusChange,
+  isNavigating = false,
 }) {
   const [backendStatus, setBackendStatus] = useState("checking");
   const [isChecking, setIsChecking] = useState(true);
@@ -129,7 +130,11 @@ export default function ConnectionStatus({
   }
 
   return (
-    <div className="status-indicators-deck" role="region" aria-label="System Status Indicators">
+    <div
+      className={`status-indicators-deck ${isNavigating ? "is-navigating" : ""}`}
+      role="region"
+      aria-label="System Status Indicators"
+    >
       {/* Indicator 1: Backend Connection (Interactive) */}
       <div
         className={`status-pill ${backendStatus}`}

@@ -724,6 +724,7 @@ export default function NagpurMap() {
         gpsAccuracy={gpsState.accuracy}
         coverageStatus={coverageStatus}
         onBackendStatusChange={handleBackendStatusChange}
+        isNavigating={isNavigating}
       />
 
       {/* Route Planning Card (Visible before navigation starts) */}
