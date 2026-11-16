@@ -256,6 +256,24 @@
   color: #1355cf;
 }
 
+.auth-link,
+.auth-back-link {
+  font-weight: 600;
+  text-underline-offset: 3px;
+}
+
+.auth-link:focus-visible,
+.auth-back-link:focus-visible {
+  outline: 3px solid rgba(26, 108, 255, 0.35);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.auth-link:active,
+.auth-back-link:active {
+  color: #0b3ea8;
+}
+
 /* Checkbox Row */
 .auth-checkbox-row {
   display: flex;
@@ -390,6 +408,15 @@
 .auth-back-link:hover {
   color: #1459d9;
   text-decoration: underline;
+}
+
+@media (hover: none) {
+  .auth-link,
+  .auth-back-link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
 }
 
 /* Mobile Responsiveness */

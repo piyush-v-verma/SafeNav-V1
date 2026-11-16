@@ -1,8 +1,22 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAdminAuth } from '../context/AdminAuthContext';
+import { useToast } from '../../../shared/toast/ToastProvider';
 
 export default function Topbar() {
   const { profile, user, signOut } = useAdminAuth();
+  const toast = useToast();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast.success('You have been signed out.');
+      navigate('/login', { replace: true });
+    } catch {
+      toast.error('Could not sign out. Please try again.');
+    }
+  };
 
   return (
     <header style={{
@@ -57,7 +71,7 @@ export default function Topbar() {
         </span>
 
         <button
-          onClick={signOut}
+          onClick={handleSignOut}
           style={{
             padding: '6px 14px',
             background: '#1e293b',

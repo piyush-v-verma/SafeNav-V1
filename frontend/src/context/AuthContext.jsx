@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
+import { useToast } from '../../../shared/toast/ToastProvider';
 
 const AuthContext = createContext(null);
 
@@ -8,6 +9,9 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { warning, success } = useToast();
+  const sessionRef = useRef(null);
+  const manualSignOutAtRef = useRef(0);
 
   // Fetch PostgreSQL profile from public.profiles
   const fetchProfile = async (userId, userEmail) => {
@@ -48,18 +52,31 @@ export function AuthProvider({ children }) {
     }
 
     // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id, session.user.email);
-      }
-      setLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        sessionRef.current = session;
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          fetchProfile(session.user.id, session.user.email);
+        }
+      })
+      .catch(() => {
+        sessionRef.current = null;
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+      })
+      .finally(() => setLoading(false));
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
+        const previousSession = sessionRef.current;
+        sessionRef.current = currentSession;
+        if (event === 'SIGNED_OUT' && previousSession && Date.now() - manualSignOutAtRef.current > 3000) {
+          warning('Your session has ended. Sign in again to continue.', { dedupeKey: 'citizen-session-ended' });
+        }
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         if (currentSession?.user) {
@@ -74,14 +91,14 @@ export function AuthProvider({ children }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [warning]);
 
   const signIn = async (email, password) => {
     if (!isSupabaseConfigured) {
       throw new Error('Supabase is not configured yet. Please configure frontend/.env first.');
     }
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
     if (error) throw error;
@@ -93,7 +110,7 @@ export function AuthProvider({ children }) {
       throw new Error('Supabase is not configured yet. Please configure frontend/.env first.');
     }
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: email.trim(),
       password,
       options: {
         data: {
@@ -106,6 +123,18 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const resendSignUpVerification = async (email) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured yet. Please configure frontend/.env first.');
+    }
+    const { data, error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+    });
+    if (error) throw error;
+    return data;
+  };
+
   const signOut = async () => {
     if (!isSupabaseConfigured) {
       setUser(null);
@@ -113,11 +142,19 @@ export function AuthProvider({ children }) {
       setProfile(null);
       return;
     }
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    setSession(null);
-    setUser(null);
-    setProfile(null);
+    manualSignOutAtRef.current = Date.now();
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      sessionRef.current = null;
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      success('You have been signed out.');
+    } catch (error) {
+      manualSignOutAtRef.current = 0;
+      throw error;
+    }
   };
 
   const signInWithGoogle = async () => {
@@ -215,6 +252,7 @@ export function AuthProvider({ children }) {
     signIn,
     signInWithGoogle,
     signUp,
+    resendSignUpVerification,
     signOut,
     resetPassword,
     sendPasswordResetOtp,

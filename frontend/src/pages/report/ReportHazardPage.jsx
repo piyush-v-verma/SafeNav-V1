@@ -16,6 +16,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { submitHazardReport } from "../../services/api";
+import { useToast } from "../../../../shared/toast/ToastProvider";
 import "./ReportHazardPage.css";
 
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB limit
@@ -29,6 +30,7 @@ const ALLOWED_MIME_TYPES = [
 
 export default function ReportHazardPage() {
   const navigate = useNavigate();
+  const toast = useToast();
 
   // Form inputs (strictly photo + optional description)
   const [selectedFile, setSelectedFile] = useState(null);
@@ -74,19 +76,20 @@ export default function ReportHazardPage() {
         });
         setGpsAccuracy(Math.round(pos.coords.accuracy));
         setGpsStatus("detected");
+        toast.success("Current location retrieved.", { dedupeKey: "location-retrieved" });
       },
       (err) => {
         console.warn("GPS detection error:", err);
         if (err.code === err.PERMISSION_DENIED) {
+          const message = "Location permission was denied. Please allow location access in your browser settings to submit road hazard reports.";
           setGpsStatus("denied");
-          setGpsErrorMsg(
-            "Location permission was denied. Please allow location access in your browser settings to submit road hazard reports."
-          );
+          setGpsErrorMsg(message);
+          toast.warning(message, { dedupeKey: "report-location-denied" });
         } else {
           setGpsStatus("error");
-          setGpsErrorMsg(
-            err.message || "Unable to acquire accurate GPS position. Please try again."
-          );
+          const message = "Unable to acquire accurate GPS position. Please try again.";
+          setGpsErrorMsg(message);
+          toast.error(message, { dedupeKey: "report-location-error" });
         }
       },
       {
@@ -189,9 +192,11 @@ export default function ReportHazardPage() {
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         imagePreview: imagePreview,
       });
+      toast.success("Road issue report submitted.");
     } catch (err) {
       console.error("Report submission failed:", err);
-      setFormError(err.message || "Failed to submit report. Please check your network and try again.");
+      setFormError("Failed to submit report. Please check your network and try again.");
+      toast.error("Report submission failed. Please try again.", { dedupeKey: "report-submit-error" });
     } finally {
       setIsSubmitting(false);
     }

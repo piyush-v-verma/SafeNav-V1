@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Shield, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Shield, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { getAuthErrorMessage, isEmailConfirmationError } from '../../services/authErrors';
+import { useToast } from '../../../../shared/toast/ToastProvider';
 import './AuthPages.css';
 
 // SVG Google Icon matching official Google branding
@@ -29,30 +31,81 @@ function GoogleIcon({ size = 18 }) {
 }
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const location = useLocation();
+  const [email, setEmail] = useState(location.state?.email || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [notice, setNotice] = useState(
+    location.state?.registrationPending
+      ? 'If your account was created, check your email for a verification link before signing in.'
+      : ''
+  );
+  const [canResendVerification, setCanResendVerification] = useState(
+    Boolean(location.state?.registrationPending)
+  );
 
-  const { signIn, signInWithGoogle, isConfigured } = useAuth();
+  const { signIn, signInWithGoogle, resendSignUpVerification, isConfigured } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
-  const location = useLocation();
   const from = location.state?.from?.pathname || '/';
+
+  useEffect(() => {
+    if (location.state?.from && !location.state?.registrationPending) {
+      toast.info('Sign in to access that SafeNav page.', { dedupeKey: 'citizen-login-required' });
+    }
+  }, [location.state, toast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setNotice('');
+    setCanResendVerification(false);
     setLoading(true);
 
     try {
-      await signIn(email, password);
+      const data = await signIn(email, password);
+      if (!data?.session) {
+        const message = 'Sign-in did not establish an active session. Try again.';
+        setError(message);
+        toast.error(message);
+        return;
+      }
+      toast.success('You are signed in.');
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err.message || 'Failed to sign in. Please check your credentials.');
+      const message = getAuthErrorMessage(err);
+      setError(message);
+      toast.error(message);
+      if (isEmailConfirmationError(err)) setCanResendVerification(true);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email.trim()) {
+      setError('Enter your email address first.');
+      return;
+    }
+    setError('');
+    setNotice('');
+    setResendLoading(true);
+    try {
+      await resendSignUpVerification(email);
+      const message = 'If this account still needs verification, a new email has been sent. Check your inbox and spam folder.';
+      setNotice(message);
+      toast.success('Verification email sent.');
+      setCanResendVerification(false);
+    } catch (err) {
+      const message = getAuthErrorMessage(err, 'signup');
+      setError(message);
+      toast.error(message);
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -62,7 +115,9 @@ export default function LoginPage() {
     try {
       await signInWithGoogle();
     } catch (err) {
-      setError(err.message || 'Google sign-in failed. Please try again.');
+      const message = getAuthErrorMessage(err);
+      setError(message);
+      toast.error(message);
       setGoogleLoading(false);
     }
   };
@@ -92,6 +147,13 @@ export default function LoginPage() {
           </div>
         )}
 
+        {notice && (
+          <div className="auth-alert-success" role="status">
+            <CheckCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+            <span>{notice}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="auth-form">
           {/* Email Input */}
           <div className="auth-field-group">
@@ -104,7 +166,10 @@ export default function LoginPage() {
                 type="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setCanResendVerification(false);
+                }}
                 placeholder="Enter your email address"
                 className="auth-input"
                 autoComplete="email"
@@ -162,6 +227,18 @@ export default function LoginPage() {
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
+
+        {canResendVerification && (
+          <button
+            type="button"
+            onClick={handleResendVerification}
+            disabled={resendLoading || !isConfigured}
+            className="auth-btn-social"
+            style={{ marginTop: '12px' }}
+          >
+            {resendLoading ? 'Sending...' : 'Resend verification email'}
+          </button>
+        )}
 
         {/* Divider */}
         <div className="auth-divider">

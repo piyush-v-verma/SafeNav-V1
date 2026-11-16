@@ -1,8 +1,24 @@
 import React from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Shield, ArrowLeft } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
 export default function PublicLayout() {
+  const { user } = useAuth();
+  const { pathname } = useLocation();
+  const isAuthPage = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'].includes(pathname);
+  const isTermsPage = pathname === '/terms';
+  const returnPath = isTermsPage ? '/register' : user ? '/' : '/login';
+  const returnLabel = isTermsPage ? 'Back to Registration' : user ? 'Return to Navigation' : 'Back to Sign In';
+  const brand = <>
+    <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#1a6cff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', boxShadow: '0 4px 10px rgba(26, 108, 255, 0.3)' }}>
+      <Shield size={20} strokeWidth={2.4} />
+    </div>
+    <div>
+      <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.02em', display: 'block', lineHeight: 1.1 }}>SafeNav</span>
+      <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 500 }}>Nagpur Road Safety</span>
+    </div>
+  </>;
   return (
     <div style={{
       minHeight: '100vh',
@@ -26,31 +42,9 @@ export default function PublicLayout() {
         top: 0,
         zIndex: 20
       }}>
-        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            background: '#1a6cff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#ffffff',
-            boxShadow: '0 4px 10px rgba(26, 108, 255, 0.3)'
-          }}>
-            <Shield size={20} strokeWidth={2.4} />
-          </div>
-          <div>
-            <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.02em', display: 'block', lineHeight: 1.1 }}>
-              SafeNav
-            </span>
-            <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 500 }}>
-              Nagpur Road Safety
-            </span>
-          </div>
-        </Link>
-        <Link
-          to="/"
+        {isAuthPage || isTermsPage ? <div aria-label="SafeNav" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>{brand}</div> : <Link to={returnPath} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>{brand}</Link>}
+        {!isAuthPage && <Link
+          to={returnPath}
           style={{
             fontSize: '0.85rem',
             color: '#1a6cff',
@@ -66,8 +60,8 @@ export default function PublicLayout() {
           }}
         >
           <ArrowLeft size={16} />
-          <span>Return to Navigation</span>
-        </Link>
+          <span>{returnLabel}</span>
+        </Link>}
       </header>
 
       {/* Centered Body with responsive padding */}

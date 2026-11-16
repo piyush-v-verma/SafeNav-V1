@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useToast } from '../../../../shared/toast/ToastProvider';
 import './AuthPages.css';
 
 export default function ResetPasswordPage() {
@@ -14,6 +15,7 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
 
   const { updatePassword } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -35,11 +37,13 @@ export default function ResetPasswordPage() {
     try {
       await updatePassword(password);
       setMessage('Password updated successfully! Redirecting to navigation...');
+      toast.success('Password updated successfully.');
       setTimeout(() => {
         navigate('/');
       }, 1800);
     } catch (err) {
       setError(err.message || 'Failed to update password.');
+      toast.error('Could not update the password. Please try again.');
     } finally {
       setLoading(false);
     }

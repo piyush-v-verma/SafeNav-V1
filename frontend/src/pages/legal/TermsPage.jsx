@@ -1,5 +1,4 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 
 export default function TermsPage() {
   return (
@@ -14,9 +13,6 @@ export default function TermsPage() {
         <p>You agree to submit truthful, accurate road observations and not submit malicious, abusive, or fake hazard reports. Accounts violating community guidelines may be suspended.</p>
         <h3 style={{ color: '#f8fafc', margin: '8px 0 0' }}>3. Road Safety Disclaimer</h3>
         <p>Always prioritize actual driving conditions, traffic laws, and personal safety over digital navigation recommendations.</p>
-      </div>
-      <div style={{ marginTop: '28px' }}>
-        <Link to="/" style={{ color: '#38bdf8', textDecoration: 'none', fontSize: '0.9rem' }}>← Return to Map</Link>
       </div>
     </div>
   );

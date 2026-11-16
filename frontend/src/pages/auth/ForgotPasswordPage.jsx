@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useToast } from '../../../../shared/toast/ToastProvider';
 import './AuthPages.css';
 
 export default function ForgotPasswordPage() {
@@ -22,6 +23,7 @@ export default function ForgotPasswordPage() {
   const [successMsg, setSuccessMsg] = useState('');
 
   const { sendPasswordResetOtp, verifyOtp, updatePassword, resetPassword, isConfigured } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
 
   // Step 1: Send OTP to Email or Phone
@@ -46,9 +48,11 @@ export default function ForgotPasswordPage() {
       }
       setOtpSent(true);
       setSuccessMsg('OTP code sent successfully! Check your inbox or SMS.');
+      toast.success('Verification code sent.');
     } catch (err) {
       // In dev mode with mock credentials or notice
       setError(err.message || 'Failed to send OTP. Please check your credentials.');
+      toast.error('Could not send a verification code. Please try again.');
     } finally {
       setSendingOtp(false);
     }
@@ -71,9 +75,11 @@ export default function ForgotPasswordPage() {
       }
       setOtpVerified(true);
       setSuccessMsg('OTP verified successfully! Now choose your new password.');
+      toast.success('Verification code accepted.');
     } catch (err) {
       // If mock/testing or Supabase verification error
       setError(err.message || 'Invalid or expired OTP. Please try again.');
+      toast.error('That verification code is invalid or expired.');
     } finally {
       setVerifyingOtp(false);
     }
@@ -106,11 +112,13 @@ export default function ForgotPasswordPage() {
         await updatePassword(newPassword);
       }
       setSuccessMsg('Password updated successfully! Redirecting to login...');
+      toast.success('Password updated successfully.');
       setTimeout(() => {
         navigate('/login');
       }, 1800);
     } catch (err) {
       setError(err.message || 'Failed to update password. Please try again.');
+      toast.error('Could not update the password. Please try again.');
     } finally {
       setUpdatingPassword(false);
     }
