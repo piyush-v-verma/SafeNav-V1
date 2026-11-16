@@ -5,7 +5,7 @@ import "./SearchBar.css";
 const DEBOUNCE_DELAY_MS = 400; // 350-500ms debounce
 const MIN_CHAR_THRESHOLD = 3;   // Minimum 3 typed characters
 
-export default function SearchBar({ onSelectLocation }) {
+export default function SearchBar({ onSelectLocation, onClear, onInputChange }) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -104,6 +104,11 @@ export default function SearchBar({ onSelectLocation }) {
   const handleInputChange = (e) => {
     const value = e.target.value;
     setQuery(value);
+
+    // Notify parent to dismiss any stale place card so suggestions have clean visibility
+    if (onInputChange) {
+      onInputChange(value);
+    }
 
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -207,13 +212,16 @@ export default function SearchBar({ onSelectLocation }) {
     }
   };
 
-  // Clear query
+  // Clear query and notify parent to close all popups and reset markers
   const handleClear = () => {
     setQuery("");
     setSuggestions([]);
     setIsOpen(false);
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+    }
+    if (onClear) {
+      onClear();
     }
   };
 

@@ -18,6 +18,7 @@ import ConnectionStatus from "./ConnectionStatus";
 import RoutePanel from "./RoutePanel";
 import NavigationHUD from "./NavigationHUD";
 import PlaceDetailCard from "./PlaceDetailCard";
+import LocationPromptModal from "./LocationPromptModal";
 import { checkLocationCoverage, calculateRoute } from "../services/api";
 
 // Configure worker once before creating the map
@@ -92,6 +93,12 @@ export default function NagpurMap() {
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [selectedPlaceCoverage, setSelectedPlaceCoverage] = useState(null);
   const [isCheckingPlaceCoverage, setIsCheckingPlaceCoverage] = useState(false);
+
+  // Location prompt modal state (when user clicks Directions without detected location)
+  const [isLocationPromptOpen, setIsLocationPromptOpen] = useState(false);
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [locationPromptError, setLocationPromptError] = useState(null);
+  const pendingDestinationRef = useRef(null);
 
   // Handle GPS status updates from LocateButton
   const handleGpsStatusChange = ({ status, accuracy }) => {
@@ -602,12 +609,62 @@ export default function NagpurMap() {
       });
   };
 
+  // Clear search bar & all floating popups, markers, and routes
+  const handleClearAll = useCallback(() => {
+    // 1. Close PlaceDetailCard and remove marker
+    setSelectedPlace(null);
+    if (selectedMarkerRef.current) {
+      selectedMarkerRef.current.remove();
+      selectedMarkerRef.current = null;
+    }
+    // 2. Close RoutePanel and reset route
+    setIsRoutePanelOpen(false);
+    setSelectedDestination(null);
+    setRouteData(null);
+    setRouteError(null);
+    // 3. Clear route lines from map
+    if (mapRef.current) {
+      const routeSource = mapRef.current.getSource("safenav-route-source");
+      if (routeSource) {
+        routeSource.setData({ type: "FeatureCollection", features: [] });
+      }
+      const accessSource = mapRef.current.getSource("safenav-access-source");
+      if (accessSource) {
+        accessSource.setData({ type: "FeatureCollection", features: [] });
+      }
+    }
+    // 4. Close location prompt modal if open
+    setIsLocationPromptOpen(false);
+    setLocationPromptError(null);
+    pendingDestinationRef.current = null;
+  }, []);
+
+  // When user types in search bar, dismiss stale place card so suggestions have unobstructed visibility
+  const handleSearchInputChange = useCallback(() => {
+    if (selectedPlace) {
+      setSelectedPlace(null);
+    }
+    if (selectedMarkerRef.current) {
+      selectedMarkerRef.current.remove();
+      selectedMarkerRef.current = null;
+    }
+  }, [selectedPlace]);
+
   // Place details card actions
   const handlePlaceDirections = useCallback(() => {
     if (!selectedPlace) return;
     const dest = selectedPlace;
-    setSelectedPlace(null);
-    handleDirectionsClick(dest);
+
+    // Check if location is already detected
+    if (latestGpsCoordsRef.current) {
+      setSelectedPlace(null);
+      handleDirectionsClick(dest);
+    } else {
+      // Location not detected yet! Save destination and prompt user to turn on location
+      pendingDestinationRef.current = dest;
+      setLocationPromptError(null);
+      setIsLocationPromptOpen(true);
+    }
   }, [selectedPlace, handleDirectionsClick]);
 
   const handlePlaceClose = useCallback(() => {
@@ -712,9 +769,82 @@ export default function NagpurMap() {
     recalculateCoverage({ latitude, longitude, accuracy });
   };
 
+  // Location prompt modal actions
+  const handleLocationPromptCancel = useCallback(() => {
+    setIsLocationPromptOpen(false);
+    setLocationPromptError(null);
+    pendingDestinationRef.current = null;
+    // User requested: "no thanks return on homepage"
+    handleClearAll();
+  }, [handleClearAll]);
+
+  const handleLocationPromptTurnOn = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationPromptError("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setIsDetectingLocation(true);
+    setLocationPromptError(null);
+    setGpsState({ status: "detecting", accuracy: null });
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsDetectingLocation(false);
+        setIsLocationPromptOpen(false);
+        const accuracy = Math.round(position.coords.accuracy);
+        const coords = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy,
+        };
+
+        // Update GPS state and place current location marker
+        handleCurrentLocationFound(coords);
+
+        // Open direction popup for the selected destination
+        const dest = pendingDestinationRef.current || selectedPlace || selectedDestination;
+        if (dest) {
+          setSelectedPlace(null);
+          setSelectedDestination(dest);
+          setIsRoutePanelOpen(true);
+          triggerRouteCalculation(coords, dest, travelMode);
+        }
+      },
+      (err) => {
+        setIsDetectingLocation(false);
+        setGpsState({ status: "denied", accuracy: null });
+        if (err.code === 1) {
+          setLocationPromptError(
+            "Location permission was denied. Please allow location access in your browser settings to continue."
+          );
+        } else if (err.code === 3) {
+          setLocationPromptError(
+            "Location request timed out. Please check your GPS signal and try again."
+          );
+        } else {
+          setLocationPromptError(
+            "Unable to retrieve your location. Please ensure device location is enabled."
+          );
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 10000,
+      }
+    );
+  }, [handleCurrentLocationFound, selectedPlace, selectedDestination, travelMode, triggerRouteCalculation]);
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {!isNavigating && <SearchBar onSelectLocation={handleSelectLocation} />}
+      {!isNavigating && (
+        <SearchBar
+          onSelectLocation={handleSelectLocation}
+          onClear={handleClearAll}
+          onInputChange={handleSearchInputChange}
+        />
+      )}
 
       {/* Place Details Card (Floating on left side below search field) */}
       {!isNavigating && !isRoutePanelOpen && selectedPlace && (
@@ -726,6 +856,15 @@ export default function NagpurMap() {
           onClose={handlePlaceClose}
         />
       )}
+
+      {/* Location Prompt Modal (Prompt when user clicks directions without GPS) */}
+      <LocationPromptModal
+        isOpen={isLocationPromptOpen}
+        onTurnOn={handleLocationPromptTurnOn}
+        onCancel={handleLocationPromptCancel}
+        isDetecting={isDetectingLocation}
+        error={locationPromptError}
+      />
       <MapControls
         map={mapInstance}
         onLocationFound={handleCurrentLocationFound}
