@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { MapPin, ChevronDown } from "lucide-react";
 import { checkBackendHealth } from "../services/api";
 import "./ConnectionStatus.css";
 
@@ -135,49 +136,59 @@ export default function ConnectionStatus({
       role="region"
       aria-label="System Status Indicators"
     >
-      {/* Indicator 1: Backend Connection (Interactive) */}
-      <div
-        className={`status-pill ${backendStatus}`}
-        onClick={performHealthCheck}
-        title={backendTooltip}
-        role="button"
-        tabIndex={0}
-      >
-        {isChecking ? (
-          <div className="status-spinner" />
-        ) : (
-          <span className={`status-dot ${backendDotClass}`} />
-        )}
-        <span className="status-text">{backendLabel}</span>
-        {!isChecking && backendStatus !== "connected" && (
-          <span className="status-refresh-icon">↻</span>
-        )}
+      {/* City Dropdown Pill */}
+      <div className="status-city-pill" title="Operational Area: Nagpur">
+        <MapPin size={15} className="status-city-pin" />
+        <span className="status-city-text">NAGPUR</span>
+        <ChevronDown size={14} className="status-city-chevron" />
       </div>
 
-      {/* Indicator 2: GPS Location */}
-      <div
-        className={`status-pill gps-${gpsStatus}`}
-        title={gpsTooltip}
-      >
-        {gpsStatus === "detecting" ? (
-          <div className="status-spinner" />
-        ) : (
-          <span className={`status-dot ${gpsDotClass}`} />
-        )}
-        <span className="status-text">{gpsLabel}</span>
-      </div>
+      {/* Unified Status Pill */}
+      <div className="status-deck-pill">
+        {/* Indicator 1: Backend Connection (Interactive) */}
+        <div
+          className={`status-item ${backendStatus}`}
+          onClick={performHealthCheck}
+          title={backendTooltip}
+          role="button"
+          tabIndex={0}
+        >
+          {isChecking ? (
+            <div className="status-spinner" />
+          ) : (
+            <span className={`status-dot ${backendDotClass}`} />
+          )}
+          <span className="status-text">{backendLabel}</span>
+          {!isChecking && backendStatus !== "connected" && (
+            <span className="status-refresh-icon">↻</span>
+          )}
+        </div>
 
-      {/* Indicator 3: Road Network Coverage */}
-      <div
-        className={`status-pill coverage-${coverageStatus}`}
-        title={coverageTooltip}
-      >
-        {coverageStatus === "checking" ? (
-          <div className="status-spinner" />
-        ) : (
-          <span className={`status-dot ${coverageDotClass}`} />
-        )}
-        <span className="status-text">{coverageLabel}</span>
+        {/* Indicator 2: GPS Location */}
+        <div
+          className={`status-item gps-${gpsStatus}`}
+          title={gpsTooltip}
+        >
+          {gpsStatus === "detecting" ? (
+            <div className="status-spinner" />
+          ) : (
+            <span className={`status-dot ${gpsDotClass}`} />
+          )}
+          <span className="status-text">{gpsLabel}</span>
+        </div>
+
+        {/* Indicator 3: Road Network Coverage */}
+        <div
+          className={`status-item coverage-${coverageStatus}`}
+          title={coverageTooltip}
+        >
+          {coverageStatus === "checking" ? (
+            <div className="status-spinner" />
+          ) : (
+            <span className={`status-dot ${coverageDotClass}`} />
+          )}
+          <span className="status-text">{coverageLabel}</span>
+        </div>
       </div>
     </div>
   );

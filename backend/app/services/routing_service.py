@@ -151,11 +151,8 @@ def is_edge_accessible(d: Dict[str, Any], mode: str) -> bool:
         if mode == "walking" and d.get("foot") not in ("yes", "permissive"):
             return False
 
-    # 3. Walking rules
+    # 3. Walking rules (Pedestrians can use all roads and bridges except motorways and explicit foot=no)
     if mode == "walking":
-        # Elevated flyovers / bypasses without pedestrian paths
-        if layer_int >= 1:
-            return False
         if hw in ("motorway", "motorway_link"):
             return False
         if d.get("foot") == "no":
@@ -367,26 +364,50 @@ def compute_route(app_state, body: RouteRequest) -> Dict[str, Any]:
     default_spd = 20.0 if mode != "walking" else 4.8
     default_suit = 1.2 if mode == "car" else (1.05 if mode == "motorcycle" else 1.0)
 
+    # Shortest route mode factors:
+    # - Car: Prioritize main roads most of the time but shortest (mild penalty on residential/service shortcuts)
+    # - Motorcycle: Mix main and narrow roads freely for the shortest path
+    # - Walking: Absolute shortest physical distance on all walkable roads/paths
+    CAR_SHORTEST_FACTORS = {
+        "trunk": 1.0, "trunk_link": 1.02,
+        "primary": 1.0, "primary_link": 1.02,
+        "secondary": 1.02, "secondary_link": 1.04,
+        "tertiary": 1.05, "tertiary_link": 1.08,
+        "unclassified": 1.15,
+        "residential": 1.35,
+        "living_street": 1.65,
+        "service": 1.75,
+        "road": 1.15,
+    }
+
     def edge_cost(u, v, e_dict):
         min_c = float("inf")
         for k, d in e_dict.items():
             if not is_edge_accessible(d, mode):
                 continue
             seg_len = float(d.get("length", 10.0))
-            if preference == "shortest":
+            hw = d.get("highway", "residential")
+            if isinstance(hw, list):
+                hw = hw[0]
+
+            if mode == "walking":
+                # Walking: Most shortest path regardless of whether main or narrow road
                 c = seg_len
+            elif preference == "shortest":
+                if mode == "car":
+                    # Car: Main route most of the time but shortest
+                    c = seg_len * CAR_SHORTEST_FACTORS.get(hw, 1.20)
+                else:
+                    # Motorcycle: Mixed main and narrow road but also shortest path
+                    factor = 1.02 if hw in ("living_street", "service") else 1.0
+                    c = seg_len * factor
             else:
-                hw = d.get("highway", "residential")
-                if isinstance(hw, list):
-                    hw = hw[0]
+                # Fastest route travel time
                 spd = speed_dict.get(hw, default_spd)
                 speed_m_s = max(spd * (1000.0 / 3600.0), 0.5)
-                if mode == "walking":
-                    # Minimize pure pedestrian travel time
-                    c = seg_len / speed_m_s
-                else:
-                    suit = suit_dict.get(hw, default_suit)
-                    c = (seg_len / speed_m_s) * suit
+                suit = suit_dict.get(hw, default_suit)
+                c = (seg_len / speed_m_s) * suit
+
             if c < min_c:
                 min_c = c
         return min_c
@@ -574,8 +595,8 @@ def compute_route(app_state, body: RouteRequest) -> Dict[str, Any]:
     advisory = None
     if mode == "walking":
         advisory = (
-            "Sidewalks and pedestrian paths are followed where available. "
-            "Route uses vehicular streets and crossings with caution."
+            "Sidewalks and pedestrian paths are not mapped on this road network. "
+            "Route follows vehicular streets. Exercise caution."
         )
     elif mode == "car" and preference == "shortest":
         advisory = "Shortest route may include narrow residential roads. Exercise caution when passing."
