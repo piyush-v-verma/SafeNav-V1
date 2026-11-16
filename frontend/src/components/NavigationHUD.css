@@ -7,8 +7,8 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
-  width: 75%;
-  max-width: 400px;
+  width: 65%;
+  max-width: 350px;
   background: #0f766e; /* Deep emerald teal navigation green */
   color: #ffffff;
   border-radius: 16px;
