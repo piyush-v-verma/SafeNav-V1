@@ -1,298 +1,524 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, MapPin, CheckCircle2, ArrowLeft, Send } from 'lucide-react';
+import React, { useState, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Camera,
+  Image as ImageIcon,
+  MapPin,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+  ArrowLeft,
+  Trash2,
+  Loader2,
+  Copy,
+  Check,
+  Send,
+  ShieldAlert,
+} from "lucide-react";
+import { submitHazardReport } from "../../services/api";
+import "./ReportHazardPage.css";
 
-const HAZARD_TYPES = [
-  { id: 'pothole', label: 'Pothole / Damage', emoji: '🕳️' },
-  { id: 'waterlogging', label: 'Waterlogging', emoji: '🌊' },
-  { id: 'construction', label: 'Road Work', emoji: '🚧' },
-  { id: 'accident', label: 'Accident / Debris', emoji: '⚠️' },
-  { id: 'streetlight', label: 'Dark / No Lights', emoji: '💡' },
-];
-
-const SEVERITIES = [
-  { id: 'minor', label: 'Minor', color: '#22c55e' },
-  { id: 'moderate', label: 'Moderate', color: '#f59e0b' },
-  { id: 'critical', label: 'Critical / Dangerous', color: '#ef4444' },
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15 MB limit
+const ALLOWED_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
 ];
 
 export default function ReportHazardPage() {
-  const [selectedType, setSelectedType] = useState('pothole');
-  const [severity, setSeverity] = useState('moderate');
-  const [description, setDescription] = useState('');
-  const [locationName, setLocationName] = useState('Current GPS Location (Nagpur)');
-  const [submitted, setSubmitted] = useState(false);
-  const [loading, setLoading] = useState(false);
-
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  // Form inputs (strictly photo + optional description)
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [description, setDescription] = useState("");
+
+  // Automatic GPS state
+  const [gpsCoords, setGpsCoords] = useState(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState(null);
+  const [gpsStatus, setGpsStatus] = useState("detecting"); // 'detecting' | 'detected' | 'denied' | 'error'
+  const [gpsErrorMsg, setGpsErrorMsg] = useState(null);
+
+  // Submission & UI feedback
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState(null);
+  const [submittedReport, setSubmittedReport] = useState(null);
+  const [copiedId, setCopiedId] = useState(false);
+
+  // Hidden file inputs
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+
+  // Automatically detect user GPS location on mount
+  useEffect(() => {
+    captureCurrentLocation();
+  }, []);
+
+  const captureCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setGpsStatus("error");
+      setGpsErrorMsg("Geolocation is not supported by your browser or device.");
+      return;
+    }
+
+    setGpsStatus("detecting");
+    setGpsErrorMsg(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsCoords({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        });
+        setGpsAccuracy(Math.round(pos.coords.accuracy));
+        setGpsStatus("detected");
+      },
+      (err) => {
+        console.warn("GPS detection error:", err);
+        if (err.code === err.PERMISSION_DENIED) {
+          setGpsStatus("denied");
+          setGpsErrorMsg(
+            "Location permission was denied. Please allow location access in your browser settings to submit road hazard reports."
+          );
+        } else {
+          setGpsStatus("error");
+          setGpsErrorMsg(
+            err.message || "Unable to acquire accurate GPS position. Please try again."
+          );
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 10000,
+      }
+    );
+  };
+
+  // Handle image file selection
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFormError(null);
+
+    // Validate type
+    if (!ALLOWED_MIME_TYPES.includes(file.type) && !file.name.match(/\.(jpe?g|png|webp|heic|heif)$/i)) {
+      setFormError("Unsupported file format. Please capture or upload a JPEG, PNG, or WebP photo.");
+      return;
+    }
+
+    // Validate size
+    if (file.size > MAX_IMAGE_BYTES) {
+      setFormError("The selected photo exceeds the 15 MB limit. Please select a smaller photo.");
+      return;
+    }
+
+    setSelectedFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setImagePreview(event.target.result);
+    };
+    reader.onerror = () => {
+      setFormError("Failed to read image file. Please try another photo.");
+      setSelectedFile(null);
+      setImagePreview(null);
+    };
+    reader.readAsDataURL(file);
+
+    // Reset inputs
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
+  };
+
+  // Remove selected image
+  const handleRemoveImage = () => {
+    setSelectedFile(null);
+    setImagePreview(null);
+    setFormError(null);
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
+  };
+
+  // Copy report ID to clipboard
+  const handleCopyReportId = () => {
+    if (!submittedReport?.report_id) return;
+    navigator.clipboard.writeText(submittedReport.report_id);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
+
+  // Handle form submission
+  const handleSubmitReport = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setSubmitted(true);
-    }, 600);
+    setFormError(null);
+
+    if (!selectedFile || !imagePreview) {
+      setFormError("Please provide a photograph of the road issue.");
+      return;
+    }
+
+    if (!gpsCoords || gpsStatus !== "detected") {
+      setFormError("Accurate GPS location is required. Please ensure location is enabled.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await submitHazardReport({
+        image: imagePreview,
+        imageFilename: selectedFile.name || "road_issue.jpg",
+        description: description,
+        latitude: gpsCoords.latitude,
+        longitude: gpsCoords.longitude,
+        accuracy: gpsAccuracy,
+      });
+
+      setSubmittedReport({
+        report_id: response.report_id || response.data?.report_id,
+        status: response.status_text || "Processing",
+        message: response.message,
+        latitude: gpsCoords.latitude,
+        longitude: gpsCoords.longitude,
+        accuracy: gpsAccuracy,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        imagePreview: imagePreview,
+      });
+    } catch (err) {
+      console.error("Report submission failed:", err);
+      setFormError(err.message || "Failed to submit report. Please check your network and try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Reset to submit another report
+  const handleResetForm = () => {
+    setSelectedFile(null);
+    setImagePreview(null);
+    setDescription("");
+    setSubmittedReport(null);
+    setFormError(null);
+    captureCurrentLocation();
   };
 
   return (
-    <div style={{
-      flex: 1,
-      height: '100%',
-      overflowY: 'auto',
-      background: 'radial-gradient(ellipse at top, #1e293b 0%, #0b1120 100%)',
-      color: '#f8fafc',
-      padding: '32px 20px',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      boxSizing: 'border-box'
-    }}>
-      <div style={{ width: '100%', maxWidth: '580px' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>🚧</span>
+    <div className="report-hazard-container">
+      <div className="report-hazard-card">
+        {/* Top Header */}
+        <header className="report-header">
+          <div className="report-header-title">
+            <div className="report-header-icon-wrap">
+              <ShieldAlert size={22} className="report-header-icon" />
+            </div>
             <div>
-              <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc' }}>
-                Report Road Hazard
-              </h1>
-              <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                Community Safety Watch — Nagpur
-              </span>
+              <h1 className="report-title">Report Road Issue</h1>
+              <p className="report-subtitle">
+                AI-Assisted Citizen Reporting &bull; Nagpur
+              </p>
             </div>
           </div>
-          <Link
-            to="/"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              background: '#1e293b',
-              border: '1px solid #334155',
-              borderRadius: '8px',
-              color: '#38bdf8',
-              fontSize: '0.85rem',
-              fontWeight: 500,
-              textDecoration: 'none'
-            }}
-          >
-            <ArrowLeft size={16} /> Map
+          <Link to="/" className="report-back-btn" title="Return to Map">
+            <ArrowLeft size={16} />
+            <span>Map</span>
           </Link>
-        </div>
+        </header>
 
-        {submitted ? (
-          <div style={{
-            background: '#0f172a',
-            border: '1px solid #22c55e',
-            borderRadius: '16px',
-            padding: '36px 24px',
-            textAlign: 'center',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.4)'
-          }}>
-            <div style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '50%',
-              background: 'rgba(34, 197, 94, 0.15)',
-              color: '#4ade80',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px'
-            }}>
-              <CheckCircle2 size={36} />
+        {/* Success Confirmation View */}
+        {submittedReport ? (
+          <div className="report-success-view">
+            <div className="success-badge-icon">
+              <CheckCircle2 size={42} strokeWidth={2.4} />
             </div>
-            <h2 style={{ margin: '0 0 8px', fontSize: '1.3rem', fontWeight: 700, color: '#f8fafc' }}>
-              Report Submitted!
-            </h2>
-            <p style={{ margin: '0 0 24px', fontSize: '0.9rem', color: '#94a3b8', lineHeight: 1.5 }}>
-              Thank you for keeping Nagpur's roads safe. Your hazard report has been logged and sent to administration for verification and route warning inclusion.
+
+            <h2 className="success-title">Report Received</h2>
+            <p className="success-subtitle">
+              Your road issue report has been recorded and queued for automated AI verification.
             </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+
+            {/* Report Reference Card */}
+            <div className="report-ref-box">
+              <div className="ref-row">
+                <span className="ref-label">Report ID</span>
+                <div className="ref-id-wrap">
+                  <code className="ref-id-code">{submittedReport.report_id}</code>
+                  <button
+                    type="button"
+                    className="copy-btn"
+                    onClick={handleCopyReportId}
+                    title="Copy Report ID"
+                  >
+                    {copiedId ? <Check size={14} color="#16a34a" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="ref-row">
+                <span className="ref-label">Current Status</span>
+                <span className="status-pill-processing">
+                  <span className="pulse-dot-amber" />
+                  <span>Processing</span>
+                </span>
+              </div>
+
+              <div className="ref-row">
+                <span className="ref-label">GPS Location</span>
+                <span className="ref-value">
+                  {submittedReport.latitude.toFixed(6)}, {submittedReport.longitude.toFixed(6)}
+                  {submittedReport.accuracy && ` (±${submittedReport.accuracy}m)`}
+                </span>
+              </div>
+
+              <div className="ref-row">
+                <span className="ref-label">Submitted At</span>
+                <span className="ref-value">{submittedReport.timestamp}</span>
+              </div>
+            </div>
+
+            {/* AI Note Banner */}
+            <div className="ai-notice-banner">
+              <p>
+                <strong>Next Step:</strong> SafeNav's automated AI pipeline will assess this photograph to identify hazard type, severity, and road safety impact.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="success-actions">
               <button
-                onClick={() => { setSubmitted(false); setDescription(''); }}
-                style={{
-                  padding: '10px 18px',
-                  background: '#1e293b',
-                  border: '1px solid #334155',
-                  color: '#f8fafc',
-                  borderRadius: '8px',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
+                type="button"
+                className="btn-secondary"
+                onClick={handleResetForm}
               >
-                Report Another
+                Submit Another Report
               </button>
-              <Link
-                to="/"
-                style={{
-                  padding: '10px 18px',
-                  background: '#2563eb',
-                  color: '#ffffff',
-                  borderRadius: '8px',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  textDecoration: 'none'
-                }}
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => navigate("/")}
               >
                 Return to Live Map
-              </Link>
+              </button>
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} style={{
-            background: '#0f172a',
-            border: '1px solid #1e293b',
-            borderRadius: '16px',
-            padding: '28px',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '20px'
-          }}>
-            {/* Category Grid */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '10px' }}>
-                Select Hazard Type
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
-                {HAZARD_TYPES.map((type) => {
-                  const isSelected = selectedType === type.id;
-                  return (
-                    <button
-                      type="button"
-                      key={type.id}
-                      onClick={() => setSelectedType(type.id)}
-                      style={{
-                        minHeight: '48px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '10px 12px',
-                        borderRadius: '10px',
-                        border: isSelected ? '1px solid #38bdf8' : '1px solid #1e293b',
-                        background: isSelected ? 'rgba(56, 189, 248, 0.12)' : '#0b1120',
-                        color: isSelected ? '#38bdf8' : '#cbd5e1',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem',
-                        fontWeight: isSelected ? 600 : 500,
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <span style={{ fontSize: '18px' }}>{type.emoji}</span>
-                      <span>{type.label}</span>
-                    </button>
-                  );
-                })}
+          /* Report Submission Form */
+          <form className="report-form" onSubmit={handleSubmitReport}>
+            {/* 1. Required Photograph Section */}
+            <section className="form-section">
+              <div className="section-label-row">
+                <label className="section-label">
+                  Road Issue Photograph <span className="required-star">*</span>
+                </label>
+                <span className="section-hint">Required for AI analysis</span>
               </div>
-            </div>
 
-            {/* Severity Level */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '8px' }}>
-                Severity
-              </label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {SEVERITIES.map((sev) => {
-                  const isSelected = severity === sev.id;
-                  return (
-                    <button
-                      type="button"
-                      key={sev.id}
-                      onClick={() => setSeverity(sev.id)}
-                      style={{
-                        flex: 1,
-                        minHeight: '44px',
-                        padding: '8px',
-                        borderRadius: '8px',
-                        border: isSelected ? `1px solid ${sev.color}` : '1px solid #1e293b',
-                        background: isSelected ? `${sev.color}18` : '#0b1120',
-                        color: isSelected ? sev.color : '#94a3b8',
-                        fontSize: '0.85rem',
-                        fontWeight: isSelected ? 700 : 500,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {sev.label}
-                    </button>
-                  );
-                })}
+              {/* Hidden Native File Inputs */}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileSelect}
+                style={{ display: "none" }}
+                aria-label="Capture with Camera"
+              />
+              <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                style={{ display: "none" }}
+                aria-label="Upload from Gallery"
+              />
+
+              {!imagePreview ? (
+                <div className="photo-picker-deck">
+                  <button
+                    type="button"
+                    className="photo-btn camera-btn"
+                    onClick={() => cameraInputRef.current?.click()}
+                  >
+                    <div className="photo-btn-icon-wrap camera-icon-bg">
+                      <Camera size={26} strokeWidth={2.2} />
+                    </div>
+                    <span className="photo-btn-title">Take Photo</span>
+                    <span className="photo-btn-desc">Open device camera</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="photo-btn gallery-btn"
+                    onClick={() => galleryInputRef.current?.click()}
+                  >
+                    <div className="photo-btn-icon-wrap gallery-icon-bg">
+                      <ImageIcon size={26} strokeWidth={2.2} />
+                    </div>
+                    <span className="photo-btn-title">Upload Image</span>
+                    <span className="photo-btn-desc">Browse files or gallery</span>
+                  </button>
+                </div>
+              ) : (
+                /* Image Preview Card */
+                <div className="image-preview-card">
+                  <div className="preview-img-wrap">
+                    <img
+                      src={imagePreview}
+                      alt="Selected road hazard preview"
+                      className="preview-img"
+                    />
+                  </div>
+                  <div className="preview-info-bar">
+                    <div className="preview-file-details">
+                      <span className="file-name" title={selectedFile?.name}>
+                        {selectedFile?.name || "road_issue.jpg"}
+                      </span>
+                      <span className="file-size">
+                        {selectedFile ? `${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB` : ""}
+                      </span>
+                    </div>
+                    <div className="preview-actions">
+                      <button
+                        type="button"
+                        className="btn-replace"
+                        onClick={() => galleryInputRef.current?.click()}
+                        title="Replace Photo"
+                      >
+                        <RefreshCw size={14} />
+                        <span>Replace</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-remove"
+                        onClick={handleRemoveImage}
+                        title="Remove Photo"
+                      >
+                        <Trash2 size={14} />
+                        <span>Remove</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* 2. Optional Description Section */}
+            <section className="form-section">
+              <div className="section-label-row">
+                <label htmlFor="hazard-description" className="section-label">
+                  Description <span className="optional-badge">Optional</span>
+                </label>
+                <span className="section-hint">AI will inspect the photo even if blank</span>
               </div>
-            </div>
-
-            {/* Location Display */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                Incident Location
-              </label>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '10px 14px',
-                background: '#0b1120',
-                border: '1px solid #1e293b',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                color: '#f8fafc'
-              }}>
-                <MapPin size={18} color="#38bdf8" />
-                <span>{locationName}</span>
-              </div>
-            </div>
-
-            {/* Optional Description */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                Additional Details (Optional)
-              </label>
               <textarea
+                id="hazard-description"
+                className="description-textarea"
+                rows={3}
+                placeholder="Add any helpful details or landmarks (e.g. Near Sitabuldi metro station)..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g. Deep pothole in left lane after flyover..."
-                rows={3}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  background: '#0b1120',
-                  border: '1px solid #334155',
-                  borderRadius: '8px',
-                  color: '#f8fafc',
-                  fontSize: '0.85rem',
-                  resize: 'vertical',
-                  boxSizing: 'border-box'
-                }}
+                maxLength={1000}
+                disabled={isSubmitting}
               />
-            </div>
+            </section>
 
-            {/* Submit Action */}
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                padding: '12px',
-                background: '#2563eb',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.95rem',
-                fontWeight: 600,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1,
-                minHeight: '48px'
-              }}
-            >
-              <Send size={18} />
-              {loading ? 'Submitting...' : 'Submit Road Report'}
-            </button>
+            {/* 3. Automatic Location Section */}
+            <section className="form-section">
+              <div className="section-label-row">
+                <label className="section-label">
+                  Hazard Location <span className="auto-badge">Automatic GPS</span>
+                </label>
+                {gpsStatus === "detected" && (
+                  <button
+                    type="button"
+                    className="gps-refresh-btn"
+                    onClick={captureCurrentLocation}
+                    title="Refresh GPS Coordinates"
+                  >
+                    <RefreshCw size={12} />
+                    <span>Refresh</span>
+                  </button>
+                )}
+              </div>
+
+              {gpsStatus === "detecting" && (
+                <div className="gps-pill detecting">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Acquiring high-accuracy GPS coordinates...</span>
+                </div>
+              )}
+
+              {gpsStatus === "detected" && gpsCoords && (
+                <div className="gps-pill detected">
+                  <MapPin size={16} className="pin-icon" />
+                  <div className="gps-details">
+                    <span className="gps-coords">
+                      {gpsCoords.latitude.toFixed(6)}, {gpsCoords.longitude.toFixed(6)}
+                    </span>
+                    {gpsAccuracy && (
+                      <span className="gps-acc"> &bull; Accurate to ±{gpsAccuracy}m</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(gpsStatus === "denied" || gpsStatus === "error") && (
+                <div className="gps-error-card">
+                  <div className="gps-error-icon">
+                    <AlertTriangle size={18} />
+                  </div>
+                  <div className="gps-error-content">
+                    <p className="gps-error-title">
+                      {gpsStatus === "denied" ? "Location Permission Required" : "GPS Unavailable"}
+                    </p>
+                    <p className="gps-error-desc">
+                      {gpsErrorMsg || "Please allow GPS access so emergency & civic authorities know where this hazard is located."}
+                    </p>
+                    <button
+                      type="button"
+                      className="gps-retry-btn"
+                      onClick={captureCurrentLocation}
+                    >
+                      <RefreshCw size={13} />
+                      <span>Retry Detecting GPS</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Form Level Error Alert */}
+            {formError && (
+              <div className="form-error-alert" role="alert">
+                <AlertTriangle size={16} />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            {/* Submit Action Button */}
+            <div className="form-submit-row">
+              <button
+                type="submit"
+                className="submit-report-btn"
+                disabled={isSubmitting || !selectedFile || gpsStatus !== "detected"}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span>Submitting Report...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} />
+                    <span>Submit Hazard Report</span>
+                  </>
+                )}
+              </button>
+            </div>
           </form>
         )}
       </div>

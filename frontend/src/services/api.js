@@ -181,3 +181,42 @@ export async function fetchMyProfileBackend() {
 
   return response.json();
 }
+
+/**
+ * Submit a citizen road hazard report.
+ * SafeNav M07: Simplified AI-Assisted Citizen Reporting
+ * POST /api/v1/reports
+ */
+export async function submitHazardReport({
+  image,
+  imageFilename = "road_issue.jpg",
+  description = null,
+  latitude,
+  longitude,
+  accuracy = null,
+}) {
+  const authHeaders = await getAuthHeaders();
+  const response = await fetch(`${API_BASE_URL}/api/v1/reports`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...authHeaders,
+    },
+    body: JSON.stringify({
+      image,
+      image_filename: imageFilename,
+      description: description?.trim() || null,
+      latitude,
+      longitude,
+      accuracy: accuracy !== null && accuracy !== undefined ? Number(accuracy) : null,
+    }),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.detail || `HTTP ${response.status}: Failed to submit report`);
+  }
+
+  return response.json();
+}

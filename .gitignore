@@ -39,12 +39,15 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Generated road network data
+# Generated road network data & uploads
 backend/data/raw/*
 !backend/data/raw/.gitkeep
 !backend/data/raw/nagpur_boundary.geojson
 backend/data/processed/*
 !backend/data/processed/.gitkeep
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
+backend/data/reports_store.json
 
 # IDE & OS files
 .vscode/
