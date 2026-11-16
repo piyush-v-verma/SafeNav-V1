@@ -1,0 +1,216 @@
+/* ==========================================================================
+   SafeNav Floating Map Controls (Bottom-Right)
+   Order:
+     1. Your Location (Locate Me)
+     2. Reset North (Compass)
+     3. Zoom In (+)
+     4. Zoom Out (−)
+   Spacing: 30px from sides / bottom (respects mobile bottom nav bar)
+   Size: High-visibility 46px × 46px touch targets
+   ========================================================================== */
+
+.safenav-map-controls {
+  position: absolute;
+  right: 30px;
+  bottom: 30px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* On mobile portrait: place 30px above the bottom navigation bar */
+@media (max-width: 767px) and (orientation: portrait), (max-width: 539px) {
+  .safenav-map-controls {
+    right: 30px;
+    bottom: calc(var(--safenav-bottom-nav-height, 64px) + 30px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Individual Control Button Base */
+.safenav-ctrl-btn {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  min-height: 46px;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16), 0 1px 3px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1e293b;
+  padding: 0;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+
+.safenav-ctrl-btn:hover:not(:disabled) {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.22);
+  transform: translateY(-1px);
+}
+
+.safenav-ctrl-btn:active:not(:disabled) {
+  transform: scale(0.95);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
+}
+
+.safenav-ctrl-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+/* 1. Location Button Accent */
+.safenav-ctrl-btn.locate-btn {
+  color: #2563eb;
+}
+
+.safenav-ctrl-btn.locate-btn:hover:not(:disabled) {
+  color: #1d4ed8;
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.safenav-ctrl-btn.locate-btn.is-active {
+  background-color: #dbeafe;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+/* 2. Reset North / Compass Button */
+.safenav-ctrl-btn.compass-btn {
+  position: relative;
+}
+
+.safenav-compass-needle-wrap {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.safenav-compass-n-label {
+  position: absolute;
+  top: 3px;
+  font-size: 8px;
+  font-weight: 800;
+  color: #ef4444;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* 3 & 4. Zoom Group (Zoom In + Zoom Out grouped together) */
+.safenav-zoom-group {
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16), 0 1px 3px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.safenav-zoom-btn {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  min-height: 46px;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1e293b;
+  padding: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.safenav-zoom-btn:hover {
+  background-color: #f1f5f9;
+  color: #0284c7;
+}
+
+.safenav-zoom-btn:active {
+  background-color: #e2e8f0;
+}
+
+.safenav-zoom-divider {
+  width: 100%;
+  height: 1px;
+  background-color: #e2e8f0;
+}
+
+/* Spinner for Location Detection */
+.safenav-locate-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid #bfdbfe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: safenav-spin 0.65s linear infinite;
+}
+
+@keyframes safenav-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Location Error Toast */
+.safenav-ctrl-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 1000;
+  max-width: min(480px, 90vw);
+  animation: safenav-toast-down 0.25s ease-out;
+}
+
+.safenav-ctrl-toast-msg {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.safenav-ctrl-toast-close {
+  background: none;
+  border: none;
+  color: #991b1b;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+@keyframes safenav-toast-down {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}

@@ -13,7 +13,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import SearchBar from "./SearchBar";
-import LocateButton from "./LocateButton";
+import MapControls from "./MapControls";
 import ConnectionStatus from "./ConnectionStatus";
 import RoutePanel from "./RoutePanel";
 import NavigationHUD from "./NavigationHUD";
@@ -85,6 +85,7 @@ export default function NagpurMap() {
   const [isRouteLoading, setIsRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState(null);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [mapInstance, setMapInstance] = useState(null);
 
   // Handle GPS status updates from LocateButton
   const handleGpsStatusChange = ({ status, accuracy }) => {
@@ -155,8 +156,6 @@ export default function NagpurMap() {
       center: [79.0882, 21.1458],
       zoom: 12,
     });
-
-    map.addControl(new NavigationControl(), "top-right");
 
     map.on("load", () => {
       console.log("Nagpur map loaded successfully!");
@@ -281,6 +280,7 @@ export default function NagpurMap() {
     });
 
     mapRef.current = map;
+    setMapInstance(map);
 
     return () => {
       if (selectedMarkerRef.current) {
@@ -293,6 +293,7 @@ export default function NagpurMap() {
       }
       map.remove();
       mapRef.current = null;
+      setMapInstance(null);
     };
   }, []);
 
@@ -715,7 +716,8 @@ export default function NagpurMap() {
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <SearchBar onSelectLocation={handleSelectLocation} />
-      <LocateButton
+      <MapControls
+        map={mapInstance}
         onLocationFound={handleCurrentLocationFound}
         onGpsStatusChange={handleGpsStatusChange}
       />
