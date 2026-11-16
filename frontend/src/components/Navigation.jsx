@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { House, Mic, AlertCircle, UserRound } from 'lucide-react';
+import safenavLogo from '../assets/safenav-logo.png';
 import './Navigation.css';
 
 /**
@@ -46,12 +47,16 @@ export default function Navigation() {
           Automatically visible on desktop, tablet, and mobile landscape
           ------------------------------------------------------------- */}
       <aside className="safenav-sidebar" aria-label="Main Navigation Sidebar">
-        {/* SafeNav Brand Shield / Logo */}
+        {/* SafeNav Brand Logo at Top of Sidebar */}
         <Link to="/" className="safenav-sidebar-brand" title="SafeNav Home">
-          <div className="safenav-brand-shield">
-            <span>🛡️</span>
+          <div className="safenav-brand-logo-wrap">
+            <img
+              src={safenavLogo}
+              alt="SafeNav Logo"
+              className="safenav-brand-logo-img"
+            />
           </div>
-          <span className="safenav-brand-text">SafeNav</span>
+          <span className="safenav-nav-label safenav-brand-label">SafeNav</span>
         </Link>
 
         {/* Vertical Navigation Links */}
