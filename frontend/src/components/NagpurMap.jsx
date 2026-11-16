@@ -443,35 +443,47 @@ export default function NagpurMap() {
   // Start active navigation session with rotated 3D perspective camera (Google Maps style)
   const handleStartNavigation = () => {
     setIsNavigating(true);
-    if (mapRef.current && latestGpsCoordsRef.current && routeData) {
+    if (mapRef.current && routeData) {
       const heading = getRouteInitialBearing(routeData);
       currentBearingRef.current = heading;
 
-      mapRef.current.easeTo({
-        center: [latestGpsCoordsRef.current.longitude, latestGpsCoordsRef.current.latitude],
-        zoom: 18.2,
-        pitch: 55,         // 55 degree forward 3D perspective
-        bearing: heading,  // Aligned straight along the dotted line towards the road!
-        padding: { top: 140, bottom: 60, left: 0, right: 0 },
-        duration: 1500,
-      });
+      const centerCoords = latestGpsCoordsRef.current
+        ? [latestGpsCoordsRef.current.longitude, latestGpsCoordsRef.current.latitude]
+        : routeData.route_geojson?.features?.[0]?.geometry?.coordinates?.[0] || null;
+
+      if (centerCoords) {
+        mapRef.current.easeTo({
+          center: centerCoords,
+          zoom: 18.2,
+          pitch: 55,         // 55 degree forward 3D perspective
+          bearing: heading,  // Aligned straight along the dotted line towards the road!
+          padding: { top: 140, bottom: 60, left: 0, right: 0 },
+          duration: 1500,
+        });
+      }
     }
   };
 
   // Re-center camera and re-align bearing to forward route heading
   const handleRecenterNavigation = () => {
-    if (mapRef.current && latestGpsCoordsRef.current && routeData) {
+    if (mapRef.current && routeData) {
       const heading = getRouteInitialBearing(routeData);
       currentBearingRef.current = heading;
 
-      mapRef.current.easeTo({
-        center: [latestGpsCoordsRef.current.longitude, latestGpsCoordsRef.current.latitude],
-        zoom: 18.2,
-        pitch: 55,
-        bearing: heading,
-        padding: { top: 140, bottom: 60, left: 0, right: 0 },
-        duration: 1000,
-      });
+      const centerCoords = latestGpsCoordsRef.current
+        ? [latestGpsCoordsRef.current.longitude, latestGpsCoordsRef.current.latitude]
+        : routeData.route_geojson?.features?.[0]?.geometry?.coordinates?.[0] || null;
+
+      if (centerCoords) {
+        mapRef.current.easeTo({
+          center: centerCoords,
+          zoom: 18.2,
+          pitch: 55,
+          bearing: heading,
+          padding: { top: 140, bottom: 60, left: 0, right: 0 },
+          duration: 1000,
+        });
+      }
     }
   };
 
@@ -702,7 +714,7 @@ export default function NagpurMap() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <SearchBar onSelectLocation={handleSelectLocation} />
+      {!isNavigating && <SearchBar onSelectLocation={handleSelectLocation} />}
 
       {/* Place Details Card (Floating on left side below search field) */}
       {!isNavigating && !isRoutePanelOpen && selectedPlace && (
