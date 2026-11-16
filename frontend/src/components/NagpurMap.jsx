@@ -490,7 +490,7 @@ export default function NagpurMap() {
     }
   };
 
-  // Close route panel and clear route
+  // Close route panel, clear route line on map, and return back to direction popup
   const handleCloseRoutePanel = () => {
     setIsRoutePanelOpen(false);
     setIsNavigating(false);
@@ -508,6 +508,22 @@ export default function NagpurMap() {
         accessSource.setData({ type: "FeatureCollection", features: [] });
       }
       mapRef.current.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+    }
+
+    // Return back to direction/place details popup as requested!
+    if (selectedDestination) {
+      setSelectedPlace(selectedDestination);
+      setIsCheckingPlaceCoverage(true);
+      checkLocationCoverage(selectedDestination.coordinates[1], selectedDestination.coordinates[0])
+        .then((coverage) => {
+          setSelectedPlaceCoverage(coverage);
+        })
+        .catch(() => {
+          setSelectedPlaceCoverage({ supported: true });
+        })
+        .finally(() => {
+          setIsCheckingPlaceCoverage(false);
+        });
     }
   };
 

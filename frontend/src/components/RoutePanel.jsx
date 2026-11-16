@@ -1,4 +1,5 @@
 import React from "react";
+import { Car, Bike, Footprints, Play, X, Loader2, AlertTriangle } from "lucide-react";
 import "./RoutePanel.css";
 
 export default function RoutePanel({
@@ -17,59 +18,74 @@ export default function RoutePanel({
   if (!destination) return null;
 
   return (
-    <div className="route-panel">
+    <div className="route-panel" role="region" aria-label="Route Planning Panel">
       {/* Header */}
       <div className="route-panel-header">
         <div className="route-panel-title-wrap">
-          <div className="route-panel-title">{destination.name || "Destination"}</div>
+          <h2 className="route-panel-title">{destination.name || "Destination"}</h2>
           {destination.description && (
-            <div className="route-panel-subtitle" title={destination.description}>
+            <p className="route-panel-subtitle" title={destination.description}>
               {destination.description}
-            </div>
+            </p>
           )}
         </div>
         <button
+          type="button"
           className="route-panel-close-btn"
           onClick={onClose}
-          aria-label="Close route panel"
-          title="Close directions"
+          aria-label="Back to location details"
+          title="Back to location details"
         >
-          &times;
+          <X size={18} strokeWidth={2.4} />
         </button>
       </div>
 
       {/* Active Navigation Badge */}
       {isNavigating && (
         <div className="navigating-badge">
-          <span className="nav-pulse-dot"></span>
-          Navigation in Progress
+          <span className="nav-pulse-dot" />
+          <span>Navigation in Progress</span>
         </div>
       )}
 
       {/* Mode Selector Tabs */}
-      <div className="route-mode-selector">
+      <div className="route-mode-selector" role="tablist" aria-label="Travel Mode">
         <button
+          type="button"
+          role="tab"
+          aria-selected={travelMode === "car"}
           className={`route-mode-tab ${travelMode === "car" ? "active" : ""}`}
           onClick={() => onModeChange("car")}
           disabled={isLoading || isNavigating}
+          title="Car Route"
         >
-          <span>🚗</span>
+          <Car size={16} strokeWidth={2.2} />
           <span>Car</span>
         </button>
+
         <button
+          type="button"
+          role="tab"
+          aria-selected={travelMode === "two_wheeler"}
           className={`route-mode-tab ${travelMode === "two_wheeler" ? "active" : ""}`}
           onClick={() => onModeChange("two_wheeler")}
           disabled={isLoading || isNavigating}
+          title="Two-Wheeler Route"
         >
-          <span>🛵</span>
+          <Bike size={16} strokeWidth={2.2} />
           <span>Two-Wheeler</span>
         </button>
+
         <button
+          type="button"
+          role="tab"
+          aria-selected={travelMode === "walking"}
           className={`route-mode-tab ${travelMode === "walking" ? "active" : ""}`}
           onClick={() => onModeChange("walking")}
           disabled={isLoading || isNavigating}
+          title="Walking Route"
         >
-          <span>🚶</span>
+          <Footprints size={16} strokeWidth={2.2} />
           <span>Walking</span>
         </button>
       </div>
@@ -77,15 +93,16 @@ export default function RoutePanel({
       {/* Loading state */}
       {isLoading && (
         <div className="route-loading">
-          <span className="route-loading-spinner"></span>
-          Calculating road route...
+          <Loader2 size={18} className="route-loading-spinner animate-spin" />
+          <span>Calculating safest road route...</span>
         </div>
       )}
 
       {/* Error state */}
       {!isLoading && error && (
         <div className="route-error-banner">
-          {error}
+          <AlertTriangle size={16} strokeWidth={2.2} />
+          <span>{error}</span>
         </div>
       )}
 
@@ -106,17 +123,17 @@ export default function RoutePanel({
             <div className="route-access-breakdown">
               {route.summary.breakdown.origin_access_distance_m > 3 && (
                 <div className="access-item">
-                  <span className="access-dot blue-dot"></span>
+                  <span className="access-dot blue-dot" />
                   <span>{route.summary.breakdown.origin_access_distance_m}m walk to road</span>
                 </div>
               )}
               <div className="access-item">
-                <span className="access-road-bar"></span>
+                <span className="access-road-bar" />
                 <span>{Math.round(route.summary.breakdown.road_route_distance_m)}m on road network</span>
               </div>
               {route.summary.breakdown.destination_access_distance_m > 3 && (
                 <div className="access-item">
-                  <span className="access-dot red-dot"></span>
+                  <span className="access-dot red-dot" />
                   <span>{route.summary.breakdown.destination_access_distance_m}m walk to destination</span>
                 </div>
               )}
@@ -125,7 +142,8 @@ export default function RoutePanel({
 
           {route.advisory && (
             <div className="route-advisory">
-              ⚠️ {route.advisory}
+              <span className="route-advisory-icon">⚠️</span>
+              <span>{route.advisory}</span>
             </div>
           )}
         </div>
@@ -134,17 +152,20 @@ export default function RoutePanel({
       {/* Action Button */}
       {!isNavigating ? (
         <button
+          type="button"
           className="route-start-btn"
           disabled={isLoading || !route}
           onClick={onStartNavigation}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
-          Start Navigation
+          <Play size={16} fill="currentColor" strokeWidth={0} />
+          <span>Start Navigation</span>
         </button>
       ) : (
-        <button className="route-exit-btn" onClick={onExitNavigation}>
+        <button
+          type="button"
+          className="route-exit-btn"
+          onClick={onExitNavigation}
+        >
           Exit Navigation
         </button>
       )}
