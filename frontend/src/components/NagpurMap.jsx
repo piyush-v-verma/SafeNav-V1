@@ -155,6 +155,7 @@ export default function NagpurMap() {
       style: "https://tiles.openfreemap.org/styles/liberty",
       center: [79.0882, 21.1458],
       zoom: 12,
+      attributionControl: false,
     });
 
     map.on("load", () => {

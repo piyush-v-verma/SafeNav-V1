@@ -19,3 +19,14 @@ body {
   background-color: #f8fafc;
   color: #0f172a;
 }
+
+/* Completely hide MapLibre / OpenFreeMap attribution pill */
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib-button,
+.maplibregl-compact,
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
