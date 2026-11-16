@@ -17,6 +17,7 @@ import MapControls from "./MapControls";
 import ConnectionStatus from "./ConnectionStatus";
 import RoutePanel from "./RoutePanel";
 import NavigationHUD from "./NavigationHUD";
+import PlaceDetailCard from "./PlaceDetailCard";
 import { checkLocationCoverage, calculateRoute } from "../services/api";
 
 // Configure worker once before creating the map
@@ -86,6 +87,11 @@ export default function NagpurMap() {
   const [routeError, setRouteError] = useState(null);
   const [isNavigating, setIsNavigating] = useState(false);
   const [mapInstance, setMapInstance] = useState(null);
+
+  // Selected Place Details Card (Floating on left side below search field)
+  const [selectedPlace, setSelectedPlace] = useState(null);
+  const [selectedPlaceCoverage, setSelectedPlaceCoverage] = useState(null);
+  const [isCheckingPlaceCoverage, setIsCheckingPlaceCoverage] = useState(false);
 
   // Handle GPS status updates from LocateButton
   const handleGpsStatusChange = ({ status, accuracy }) => {
@@ -505,83 +511,12 @@ export default function NagpurMap() {
     }
   };
 
-  // Construct destination popup DOM element with Directions button & coverage check
-  const createDestinationPopupElement = (destInfo) => {
-    const container = document.createElement("div");
-    container.style.fontFamily = "system-ui, -apple-system, sans-serif";
-    container.style.padding = "6px 4px";
-    container.style.minWidth = "200px";
-    container.style.maxWidth = "280px";
-
-    container.innerHTML = `
-      <div style="font-weight: 700; font-size: 14px; color: #0f172a;">${destInfo.name}</div>
-      ${
-        destInfo.description
-          ? `<div style="font-size: 12px; color: #64748b; margin-top: 3px; margin-bottom: 8px; line-height: 1.3;">${destInfo.description}</div>`
-          : ""
-      }
-      <div id="dest-coverage-slot" style="margin-bottom: 8px; font-size: 11px; color: #64748b;">
-        <span style="display:inline-block; width:6px; height:6px; background:#94a3b8; border-radius:50%; margin-right:4px;"></span>
-        Checking coverage...
-      </div>
-      <button id="dest-directions-btn" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; background: #2563eb; color: #ffffff; border: none; padding: 8px 12px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s ease; box-shadow: 0 2px 5px rgba(37,99,235,0.25);">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
-        </svg>
-        Directions
-      </button>
-    `;
-
-    const btn = container.querySelector("#dest-directions-btn");
-    btn.addEventListener("click", () => {
-      handleDirectionsClick(destInfo);
-    });
-
-    // Check coverage for destination coordinates [lon, lat]
-    checkLocationCoverage(destInfo.coordinates[1], destInfo.coordinates[0])
-      .then((coverage) => {
-        const slot = container.querySelector("#dest-coverage-slot");
-        if (!slot) return;
-        if (coverage.supported) {
-          slot.innerHTML = `
-            <span style="color: #059669; font-weight: 600; display: flex; align-items: center; gap: 4px;">
-              <span style="display:inline-flex; align-items:center; justify-content:center; width:12px; height:12px; background:#10b981; color:#fff; border-radius:50%; font-size:9px;">&#10003;</span>
-              Inside Nagpur Coverage
-            </span>
-          `;
-        } else {
-          slot.innerHTML = `
-            <div style="color: #b45309; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">
-              <span style="display:inline-flex; align-items:center; justify-content:center; width:12px; height:12px; background:#f59e0b; color:#fff; border-radius:50%; font-size:9px;">!</span>
-              Outside Nagpur Coverage
-            </div>
-            <div style="font-size: 10px; color: #64748b; line-height: 1.3;">
-              Road navigation is only available within Nagpur limits.
-            </div>
-          `;
-          if (btn) {
-            btn.disabled = true;
-            btn.style.background = "#94a3b8";
-            btn.style.cursor = "not-allowed";
-            btn.style.boxShadow = "none";
-            btn.innerText = "Directions Unavailable";
-          }
-        }
-      })
-      .catch(() => {
-        const slot = container.querySelector("#dest-coverage-slot");
-        if (slot) slot.innerHTML = "";
-      });
-
-    return container;
-  };
-
-  // Handle location selection from Photon search
+  // Handle location selection from search (or Enter key)
   const handleSelectLocation = (coordinates, feature) => {
     if (!mapRef.current) return;
     const map = mapRef.current;
 
-    // Move map to selected search result
+    // Smoothly fly map to selected search result
     map.flyTo({
       center: coordinates,
       zoom: 15,
@@ -595,30 +530,65 @@ export default function NagpurMap() {
       .filter(Boolean)
       .join(", ");
 
-    const destInfo = {
+    const placeInfo = {
       name,
       description,
       coordinates,
     };
 
-    const popupElement = createDestinationPopupElement(destInfo);
-    const popup = new Popup({ offset: 25 }).setDOMContent(popupElement);
+    // Close any active route planning panel and display place details card below search
+    setIsRoutePanelOpen(false);
+    setSelectedPlace(placeInfo);
+    setIsCheckingPlaceCoverage(true);
+    setSelectedPlaceCoverage(null);
 
+    // Drop or reposition the red marker on the map WITHOUT anchoring an on-map popup
     if (selectedMarkerRef.current) {
-      selectedMarkerRef.current.setLngLat(coordinates).setPopup(popup);
-      if (!selectedMarkerRef.current.getPopup().isOpen()) {
-        selectedMarkerRef.current.togglePopup();
-      }
+      selectedMarkerRef.current.setLngLat(coordinates);
     } else {
       const marker = new Marker({ color: "#ef4444" })
         .setLngLat(coordinates)
-        .setPopup(popup)
         .addTo(map);
 
-      marker.togglePopup();
+      // Clicking marker on map re-opens the left place detail card
+      const el = marker.getElement();
+      el.style.cursor = "pointer";
+      el.addEventListener("click", () => {
+        setSelectedPlace(placeInfo);
+      });
+
       selectedMarkerRef.current = marker;
     }
+
+    // Verify road network coverage for destination coordinates [lon, lat]
+    checkLocationCoverage(coordinates[1], coordinates[0])
+      .then((coverage) => {
+        setSelectedPlaceCoverage(coverage);
+      })
+      .catch((err) => {
+        console.warn("Place coverage check failed:", err.message);
+        setSelectedPlaceCoverage({ supported: true });
+      })
+      .finally(() => {
+        setIsCheckingPlaceCoverage(false);
+      });
   };
+
+  // Place details card actions
+  const handlePlaceDirections = useCallback(() => {
+    if (!selectedPlace) return;
+    const dest = selectedPlace;
+    setSelectedPlace(null);
+    handleDirectionsClick(dest);
+  }, [selectedPlace, handleDirectionsClick]);
+
+  const handlePlaceClose = useCallback(() => {
+    setSelectedPlace(null);
+    if (selectedMarkerRef.current) {
+      selectedMarkerRef.current.remove();
+      selectedMarkerRef.current = null;
+    }
+  }, []);
 
   // Helper to construct GPS location popup with coverage indicator
   const createLocationPopupHTML = (accuracy, coverage = null, isChecking = false) => {
@@ -717,6 +687,17 @@ export default function NagpurMap() {
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <SearchBar onSelectLocation={handleSelectLocation} />
+
+      {/* Place Details Card (Floating on left side below search field) */}
+      {!isNavigating && !isRoutePanelOpen && selectedPlace && (
+        <PlaceDetailCard
+          place={selectedPlace}
+          coverage={selectedPlaceCoverage}
+          isCheckingCoverage={isCheckingPlaceCoverage}
+          onDirections={handlePlaceDirections}
+          onClose={handlePlaceClose}
+        />
+      )}
       <MapControls
         map={mapInstance}
         onLocationFound={handleCurrentLocationFound}

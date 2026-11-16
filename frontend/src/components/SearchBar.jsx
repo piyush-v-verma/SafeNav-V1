@@ -137,23 +137,71 @@ export default function SearchBar({ onSelectLocation }) {
     }
   };
 
+  // Fetch immediately and select the top matching result on Enter
+  const fetchImmediateAndSelect = (searchQuery) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
+    setIsLoading(true);
+
+    const params = new URLSearchParams({
+      q: searchQuery,
+      lat: "21.1458",
+      lon: "79.0882",
+      limit: "5",
+      lang: "en",
+    });
+
+    fetch(`https://photon.komoot.io/api/?${params.toString()}`, {
+      signal: abortControllerRef.current.signal,
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Search failed");
+        return res.json();
+      })
+      .then((data) => {
+        const features = data.features || [];
+        if (features.length > 0) {
+          handleSelect(features[0]);
+        }
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error("Photon enter search error:", err);
+        }
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  };
+
   // Keyboard navigation
   const handleKeyDown = (e) => {
-    if (!isOpen || suggestions.length === 0) return;
-
     if (e.key === "ArrowDown") {
+      if (!isOpen || suggestions.length === 0) return;
       e.preventDefault();
       setHighlightedIndex((prev) =>
         prev < suggestions.length - 1 ? prev + 1 : 0
       );
     } else if (e.key === "ArrowUp") {
+      if (!isOpen || suggestions.length === 0) return;
       e.preventDefault();
       setHighlightedIndex((prev) =>
         prev > 0 ? prev - 1 : suggestions.length - 1
       );
-    } else if (e.key === "Enter" && highlightedIndex >= 0) {
+    } else if (e.key === "Enter") {
       e.preventDefault();
-      handleSelect(suggestions[highlightedIndex]);
+      if (suggestions.length > 0) {
+        const target = highlightedIndex >= 0 ? suggestions[highlightedIndex] : suggestions[0];
+        handleSelect(target);
+      } else if (query.trim().length >= MIN_CHAR_THRESHOLD) {
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+        }
+        fetchImmediateAndSelect(query.trim());
+      }
     } else if (e.key === "Escape") {
       setIsOpen(false);
     }
