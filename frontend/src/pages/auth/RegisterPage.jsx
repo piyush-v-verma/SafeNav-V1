@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Shield, User, Mail, Phone, Lock, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import './AuthPages.css';
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState('');
-  const [mobileNumber, setMobileNumber] = useState('');
   const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
+
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,7 +37,7 @@ export default function RegisterPage() {
     }
 
     if (!agreeTerms) {
-      setError('Please agree to the Terms of Service and Privacy Policy.');
+      setError('Please agree to the Terms and Conditions.');
       return;
     }
 
@@ -41,245 +46,201 @@ export default function RegisterPage() {
     try {
       const data = await signUp(email, password, {
         fullName: fullName.trim(),
-        mobileNumber: mobileNumber.trim(),
+        mobileNumber: phoneNumber.trim(),
       });
 
       if (data?.session) {
         navigate('/', { replace: true });
       } else {
         setSuccessMsg(
-          'Registration successful! Please check your email inbox to verify your account before signing in.'
+          'Registration successful! Please check your email to verify your account, then log in.'
         );
       }
     } catch (err) {
-      setError(err.message || 'Registration failed. Please try again.');
+      setError(err.message || 'Registration failed. Please check your details and try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{
-      width: '100%',
-      maxWidth: '460px',
-      background: '#1e293b',
-      border: '1px solid #334155',
-      borderRadius: '12px',
-      padding: '32px 28px',
-      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)'
-    }}>
-      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-        <h1 style={{ margin: '0 0 8px', fontSize: '1.5rem', fontWeight: 700, color: '#f8fafc' }}>
-          Create Citizen Account
-        </h1>
-        <p style={{ margin: 0, fontSize: '0.875rem', color: '#94a3b8' }}>
-          Join SafeNav Nagpur to navigate safely and report road hazards
-        </p>
-      </div>
-
-      {!isConfigured && (
-        <div style={{
-          background: 'rgba(234, 179, 8, 0.1)',
-          border: '1px solid rgba(234, 179, 8, 0.3)',
-          borderRadius: '8px',
-          padding: '12px',
-          marginBottom: '20px',
-          fontSize: '0.8rem',
-          color: '#facc15'
-        }}>
-          💡 <strong>Setup Notice:</strong> Supabase credentials are not configured in <code>frontend/.env</code> yet.
+    <div className="auth-page-wrapper">
+      <div className="auth-card">
+        {/* Top Circular Shield Badge */}
+        <div className="auth-header">
+          <div className="auth-badge">
+            <Shield strokeWidth={2.4} />
+          </div>
+          <h1 className="auth-title">Create Account</h1>
+          <p className="auth-subtitle">Join us for safer journeys</p>
         </div>
-      )}
 
-      {error && (
-        <div style={{
-          background: 'rgba(239, 68, 68, 0.15)',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
-          borderRadius: '8px',
-          padding: '12px',
-          marginBottom: '20px',
-          fontSize: '0.85rem',
-          color: '#f87171'
-        }}>
-          {error}
-        </div>
-      )}
+        {!isConfigured && (
+          <div className="auth-alert-notice">
+            💡 <strong>Notice:</strong> Supabase credentials are not configured in <code>frontend/.env</code> yet.
+          </div>
+        )}
 
-      {successMsg && (
-        <div style={{
-          background: 'rgba(34, 197, 94, 0.15)',
-          border: '1px solid rgba(34, 197, 94, 0.3)',
-          borderRadius: '8px',
-          padding: '12px',
-          marginBottom: '20px',
-          fontSize: '0.85rem',
-          color: '#4ade80'
-        }}>
-          {successMsg}
-        </div>
-      )}
+        {error && (
+          <div className="auth-alert-error">
+            <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+            <span>{error}</span>
+          </div>
+        )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: '#cbd5e1', marginBottom: '6px' }}>
-            Full Name
+        {successMsg && (
+          <div className="auth-alert-success">
+            <CheckCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          {/* Full Name */}
+          <div className="auth-field-group">
+            <label className="auth-label">Full Name</label>
+            <div className="auth-input-container">
+              <span className="auth-input-icon">
+                <User />
+              </span>
+              <input
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Enter your full name"
+                className="auth-input"
+                autoComplete="name"
+              />
+            </div>
+          </div>
+
+          {/* Email Address */}
+          <div className="auth-field-group">
+            <label className="auth-label">Email Address</label>
+            <div className="auth-input-container">
+              <span className="auth-input-icon">
+                <Mail />
+              </span>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email address"
+                className="auth-input"
+                autoComplete="email"
+              />
+            </div>
+          </div>
+
+          {/* Phone Number */}
+          <div className="auth-field-group">
+            <label className="auth-label">Phone Number</label>
+            <div className="auth-input-container">
+              <span className="auth-input-icon">
+                <Phone />
+              </span>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="Enter your phone number"
+                className="auth-input"
+                autoComplete="tel"
+              />
+            </div>
+          </div>
+
+          {/* Password */}
+          <div className="auth-field-group">
+            <label className="auth-label">Password</label>
+            <div className="auth-input-container">
+              <span className="auth-input-icon">
+                <Lock />
+              </span>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Create a strong password"
+                className="auth-input"
+                autoComplete="new-password"
+                style={{ paddingRight: '40px' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="auth-password-toggle"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Confirm Password */}
+          <div className="auth-field-group">
+            <label className="auth-label">Confirm Password</label>
+            <div className="auth-input-container">
+              <span className="auth-input-icon">
+                <Lock />
+              </span>
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter your password"
+                className="auth-input"
+                autoComplete="new-password"
+                style={{ paddingRight: '40px' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="auth-password-toggle"
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Terms and Conditions Checkbox */}
+          <label className="auth-checkbox-row">
+            <input
+              type="checkbox"
+              checked={agreeTerms}
+              onChange={(e) => setAgreeTerms(e.target.checked)}
+              className="auth-checkbox"
+            />
+            <span>
+              I agree to the{' '}
+              <Link to="/terms" target="_blank" className="auth-link">
+                Terms and Conditions
+              </Link>
+            </span>
           </label>
-          <input
-            type="text"
-            required
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Piyush Verma"
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              background: '#0f172a',
-              border: '1px solid #334155',
-              borderRadius: '6px',
-              color: '#f8fafc',
-              fontSize: '0.9rem',
-              boxSizing: 'border-box'
-            }}
-          />
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="auth-btn-primary"
+          >
+            {loading ? 'Creating Account...' : 'Create Account'}
+          </button>
+        </form>
+
+        {/* Footer Link */}
+        <div className="auth-footer">
+          Already have an account?{' '}
+          <Link to="/login" className="auth-link">
+            Log in here
+          </Link>
         </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: '#cbd5e1', marginBottom: '6px' }}>
-            Mobile Number (Optional)
-          </label>
-          <input
-            type="tel"
-            value={mobileNumber}
-            onChange={(e) => setMobileNumber(e.target.value)}
-            placeholder="+91 98765 43210"
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              background: '#0f172a',
-              border: '1px solid #334155',
-              borderRadius: '6px',
-              color: '#f8fafc',
-              fontSize: '0.9rem',
-              boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: '#cbd5e1', marginBottom: '6px' }}>
-            Email Address
-          </label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="citizen@nagpur.in"
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              background: '#0f172a',
-              border: '1px solid #334155',
-              borderRadius: '6px',
-              color: '#f8fafc',
-              fontSize: '0.9rem',
-              boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: '#cbd5e1', marginBottom: '6px' }}>
-            Password (min 8 characters)
-          </label>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              background: '#0f172a',
-              border: '1px solid #334155',
-              borderRadius: '6px',
-              color: '#f8fafc',
-              fontSize: '0.9rem',
-              boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, color: '#cbd5e1', marginBottom: '6px' }}>
-            Confirm Password
-          </label>
-          <input
-            type="password"
-            required
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="••••••••"
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              background: '#0f172a',
-              border: '1px solid #334155',
-              borderRadius: '6px',
-              color: '#f8fafc',
-              fontSize: '0.9rem',
-              boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '4px' }}>
-          <input
-            type="checkbox"
-            id="terms"
-            checked={agreeTerms}
-            onChange={(e) => setAgreeTerms(e.target.checked)}
-            style={{ marginTop: '3px' }}
-          />
-          <label htmlFor="terms" style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: 1.4 }}>
-            I agree to the{' '}
-            <Link to="/terms" target="_blank" style={{ color: '#38bdf8', textDecoration: 'none' }}>
-              Terms of Service
-            </Link>{' '}
-            and{' '}
-            <Link to="/privacy" target="_blank" style={{ color: '#38bdf8', textDecoration: 'none' }}>
-              Privacy Policy
-            </Link>
-          </label>
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            marginTop: '8px',
-            padding: '12px',
-            background: '#2563eb',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '0.95rem',
-            fontWeight: 600,
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.7 : 1,
-            transition: 'background 0.15s ease'
-          }}
-        >
-          {loading ? 'Creating Account...' : 'Register as Citizen'}
-        </button>
-      </form>
-
-      <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '0.85rem', color: '#94a3b8' }}>
-        Already have an account?{' '}
-        <Link to="/login" style={{ color: '#38bdf8', textDecoration: 'none', fontWeight: 500 }}>
-          Sign in
-        </Link>
       </div>
     </div>
   );

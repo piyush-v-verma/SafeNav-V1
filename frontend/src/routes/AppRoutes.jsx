@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import PublicLayout from '../layouts/PublicLayout';
 import MapPage from '../pages/MapPage';
+import AssistantPage from '../pages/assistant/AssistantPage';
+import ReportHazardPage from '../pages/report/ReportHazardPage';
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
 import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage';
@@ -20,9 +22,11 @@ export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Main Application Shell */}
+        {/* Main Application Shell with Responsive Navigation */}
         <Route element={<MainLayout />}>
           <Route path="/" element={<MapPage />} />
+          <Route path="/assistant" element={<AssistantPage />} />
+          <Route path="/report" element={<ReportHazardPage />} />
           <Route
             path="/profile"
             element={

@@ -713,7 +713,7 @@ export default function NagpurMap() {
   };
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100vh" }}>
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <SearchBar onSelectLocation={handleSelectLocation} />
       <LocateButton
         onLocationFound={handleCurrentLocationFound}
@@ -758,7 +758,7 @@ export default function NagpurMap() {
         ref={mapContainer}
         style={{
           width: "100%",
-          height: "100vh",
+          height: "100%",
         }}
       />
     </div>

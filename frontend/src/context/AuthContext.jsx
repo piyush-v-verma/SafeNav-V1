@@ -120,12 +120,59 @@ export function AuthProvider({ children }) {
     setProfile(null);
   };
 
+  const signInWithGoogle = async () => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured yet. Please configure frontend/.env first.');
+    }
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
   const resetPassword = async (email) => {
     if (!isSupabaseConfigured) {
       throw new Error('Supabase is not configured yet.');
     }
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const sendPasswordResetOtp = async (emailOrPhone) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured yet.');
+    }
+    // If it looks like an email:
+    if (emailOrPhone.includes('@')) {
+      const { data, error } = await supabase.auth.resetPasswordForEmail(emailOrPhone);
+      if (error) throw error;
+      return data;
+    } else {
+      // Phone OTP
+      const { data, error } = await supabase.auth.signInWithOtp({
+        phone: emailOrPhone,
+      });
+      if (error) throw error;
+      return data;
+    }
+  };
+
+  const verifyOtp = async (emailOrPhone, token) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured yet.');
+    }
+    const isEmail = emailOrPhone.includes('@');
+    const { data, error } = await supabase.auth.verifyOtp({
+      [isEmail ? 'email' : 'phone']: emailOrPhone,
+      token,
+      type: isEmail ? 'recovery' : 'sms',
     });
     if (error) throw error;
     return data;
@@ -166,9 +213,12 @@ export function AuthProvider({ children }) {
     loading,
     isConfigured: isSupabaseConfigured,
     signIn,
+    signInWithGoogle,
     signUp,
     signOut,
     resetPassword,
+    sendPasswordResetOtp,
+    verifyOtp,
     updatePassword,
     updateProfile,
     refreshProfile: () => fetchProfile(user?.id, user?.email),

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, Outlet } from 'react-router-dom';
+import { Shield, ArrowLeft } from 'lucide-react';
 
 export default function PublicLayout() {
   return (
@@ -7,9 +8,10 @@ export default function PublicLayout() {
       minHeight: '100vh',
       display: 'flex',
       flexDirection: 'column',
-      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-      color: '#f8fafc',
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      background: 'linear-gradient(180deg, #edf5ff 0%, #f4f8fe 40%, #ffffff 100%)',
+      color: '#0f172a',
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      overflowY: 'auto'
     }}>
       {/* Public Header */}
       <header style={{
@@ -17,54 +19,87 @@ export default function PublicLayout() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        borderBottom: '1px solid rgba(255,255,255,0.08)'
+        borderBottom: '1px solid rgba(226, 232, 240, 0.8)',
+        background: 'rgba(255, 255, 255, 0.85)',
+        backdropFilter: 'blur(8px)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 20
       }}>
-        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '24px' }}>🛡️</span>
-          <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.02em' }}>SafeNav</span>
+        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '10px',
+            background: '#1a6cff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#ffffff',
+            boxShadow: '0 4px 10px rgba(26, 108, 255, 0.3)'
+          }}>
+            <Shield size={20} strokeWidth={2.4} />
+          </div>
+          <div>
+            <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.02em', display: 'block', lineHeight: 1.1 }}>
+              SafeNav
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 500 }}>
+              Nagpur Road Safety
+            </span>
+          </div>
         </Link>
         <Link
           to="/"
           style={{
             fontSize: '0.85rem',
-            color: '#38bdf8',
+            color: '#1a6cff',
             textDecoration: 'none',
             display: 'flex',
             alignItems: 'center',
-            gap: '4px'
+            gap: '6px',
+            fontWeight: 600,
+            padding: '8px 14px',
+            borderRadius: '8px',
+            background: 'rgba(26, 108, 255, 0.08)',
+            transition: 'background 0.15s ease'
           }}
         >
-          ← Return to Navigation
+          <ArrowLeft size={16} />
+          <span>Return to Navigation</span>
         </Link>
       </header>
 
-      {/* Centered Body */}
+      {/* Centered Body with responsive padding */}
       <main style={{
         flex: 1,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '32px 16px'
+        padding: '32px 16px',
+        boxSizing: 'border-box'
       }}>
         <Outlet />
       </main>
 
       {/* Public Footer */}
       <footer style={{
-        padding: '16px 24px',
+        padding: '20px 24px',
         textAlign: 'center',
         fontSize: '0.8rem',
         color: '#64748b',
-        borderTop: '1px solid rgba(255,255,255,0.05)',
+        borderTop: '1px solid rgba(226, 232, 240, 0.8)',
+        background: '#ffffff',
         display: 'flex',
         justifyContent: 'center',
-        gap: '16px',
+        alignItems: 'center',
+        gap: '20px',
         flexWrap: 'wrap'
       }}>
         <span>© 2026 SafeNav Nagpur</span>
-        <Link to="/terms" style={{ color: '#94a3b8', textDecoration: 'none' }}>Terms of Service</Link>
-        <Link to="/privacy" style={{ color: '#94a3b8', textDecoration: 'none' }}>Privacy Policy</Link>
-        <Link to="/about" style={{ color: '#94a3b8', textDecoration: 'none' }}>About</Link>
+        <Link to="/terms" style={{ color: '#64748b', textDecoration: 'none', transition: 'color 0.15s' }}>Terms of Service</Link>
+        <Link to="/privacy" style={{ color: '#64748b', textDecoration: 'none', transition: 'color 0.15s' }}>Privacy Policy</Link>
+        <Link to="/about" style={{ color: '#64748b', textDecoration: 'none', transition: 'color 0.15s' }}>About</Link>
       </footer>
     </div>
   );
