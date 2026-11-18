@@ -24,16 +24,35 @@ function AuthCallbackRedirect() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (location.pathname === '/verify-email') return;
+    // If already on the dedicated callback handler pages, do not re-route
+    if (location.pathname === '/verify-email' || location.pathname === '/reset-password') return;
 
     const params = new URLSearchParams(`${location.search}&${location.hash.replace(/^#/, '')}`);
-    const errorCode = params.get('error_code') || '';
+    const type = params.get('type') || '';
+    const errorCode = params.get('error_code') || params.get('error') || '';
     const errorDescription = params.get('error_description') || '';
-    const isExpiredEmailLink =
+    const isExpiredLink =
       errorCode === 'otp_expired' ||
-      /email link.*invalid|email link.*expired/i.test(errorDescription);
+      /email link.*invalid|email link.*expired|token.*expired/i.test(errorDescription);
 
-    if (isExpiredEmailLink) {
+    // 1. Handle expired or invalid links with flow-specific destinations
+    if (isExpiredLink) {
+      if (type === 'recovery') {
+        navigate(`/reset-password${location.search}${location.hash}`, { replace: true });
+      } else {
+        navigate(`/verify-email${location.search}${location.hash}`, { replace: true });
+      }
+      return;
+    }
+
+    // 2. Route password recovery tokens explicitly to /reset-password
+    if (type === 'recovery') {
+      navigate(`/reset-password${location.search}${location.hash}`, { replace: true });
+      return;
+    }
+
+    // 3. Route signup email verification callbacks to /verify-email
+    if (type === 'signup' && location.pathname !== '/verify-email') {
       navigate(`/verify-email${location.search}${location.hash}`, { replace: true });
     }
   }, [location.hash, location.pathname, location.search, navigate]);

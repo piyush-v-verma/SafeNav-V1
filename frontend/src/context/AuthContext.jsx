@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
   const { warning, success } = useToast();
   const sessionRef = useRef(null);
   const manualSignOutAtRef = useRef(0);
@@ -51,14 +52,22 @@ export function AuthProvider({ children }) {
       return;
     }
 
+    // Check if current URL hash or path indicates password recovery
+    const isRecoveryUrl =
+      typeof window !== 'undefined' &&
+      (window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password');
+    if (isRecoveryUrl) {
+      setIsRecoveryMode(true);
+    }
+
     // Initial session check
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
         sessionRef.current = session;
         setSession(session);
         setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchProfile(session.user.id, session.user.email);
+        if (isRecoveryUrl || window.location.hash.includes('type=recovery')) {
+          setIsRecoveryMode(true);
         }
       })
       .catch(() => {
@@ -69,21 +78,23 @@ export function AuthProvider({ children }) {
       })
       .finally(() => setLoading(false));
 
-    // Listen for auth state changes
+    // Listen for auth state changes synchronously (no async profile blocking in callback)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, currentSession) => {
+      (event, currentSession) => {
         const previousSession = sessionRef.current;
         sessionRef.current = currentSession;
-        if (event === 'SIGNED_OUT' && previousSession && Date.now() - manualSignOutAtRef.current > 3000) {
-          warning('Your session has ended. Sign in again to continue.', { dedupeKey: 'citizen-session-ended' });
+
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsRecoveryMode(true);
+        } else if (event === 'SIGNED_OUT') {
+          setIsRecoveryMode(false);
+          if (previousSession && Date.now() - manualSignOutAtRef.current > 3000) {
+            warning('Your session has ended. Sign in again to continue.', { dedupeKey: 'citizen-session-ended' });
+          }
         }
+
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
-        if (currentSession?.user) {
-          await fetchProfile(currentSession.user.id, currentSession.user.email);
-        } else {
-          setProfile(null);
-        }
         setLoading(false);
       }
     );
@@ -92,6 +103,30 @@ export function AuthProvider({ children }) {
       subscription.unsubscribe();
     };
   }, [warning]);
+
+  // Separate, non-blocking profile synchronization triggered by user changes
+  useEffect(() => {
+    if (!isSupabaseConfigured || !user?.id) {
+      setProfile(null);
+      return;
+    }
+
+    // Skip normal citizen profile fetch during recovery flow
+    if (isRecoveryMode || (typeof window !== 'undefined' && window.location.pathname === '/reset-password')) {
+      return;
+    }
+
+    let isMounted = true;
+    fetchProfile(user.id, user.email).then((userProf) => {
+      if (isMounted && userProf) {
+        setProfile(userProf);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, user?.email, isRecoveryMode]);
 
   const signIn = async (email, password) => {
     if (!isSupabaseConfigured) {
@@ -243,12 +278,18 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const clearRecoveryMode = () => {
+    setIsRecoveryMode(false);
+  };
+
   const value = {
     session,
     user,
     profile,
     loading,
     isConfigured: isSupabaseConfigured,
+    isRecoveryMode,
+    clearRecoveryMode,
     signIn,
     signInWithGoogle,
     signUp,

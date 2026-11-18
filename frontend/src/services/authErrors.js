@@ -23,6 +23,14 @@ export function getAuthErrorMessage(error, context = 'login') {
   }
 
   if (
+    code === 'over_email_send_rate_limit' ||
+    message.includes('rate limit') ||
+    message.includes('over_email_send_rate_limit')
+  ) {
+    return 'For security, please wait a minute before requesting another recovery email.';
+  }
+
+  if (
     code === 'otp_expired' ||
     code === 'token_expired' ||
     message.includes('link is invalid or has expired') ||
@@ -71,6 +79,10 @@ export function getAuthErrorMessage(error, context = 'login') {
 
   if (message.includes('not configured') || message.includes('placeholder-project')) {
     return 'Authentication is not configured. Check the Supabase settings in frontend/.env.';
+  }
+
+  if (context === 'resetPassword') {
+    return 'Could not send recovery email. Check your details and try again.';
   }
 
   return context === 'signup'

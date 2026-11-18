@@ -40,7 +40,9 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [notice, setNotice] = useState(
-    location.state?.registrationPending
+    location.state?.passwordResetSuccess
+      ? 'Password changed successfully. You can now log in.'
+      : location.state?.registrationPending
       ? 'If your account was created, check your email for a verification link before signing in.'
       : ''
   );
