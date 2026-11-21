@@ -21,7 +21,7 @@
   padding: 0 24px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   border-bottom: 1px solid rgba(226, 232, 240, 0.85);
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(12px);
@@ -80,29 +80,6 @@
   line-height: 1.1;
 }
 
-/* Header Action Link / Button */
-.public-header-action {
-  font-size: 0.86rem;
-  color: #1a6cff;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  padding: 8px 14px;
-  border-radius: 8px;
-  background: rgba(26, 108, 255, 0.08);
-  border: 1px solid rgba(26, 108, 255, 0.18);
-  transition: all 0.18s ease;
-  white-space: nowrap;
-}
-
-.public-header-action:hover {
-  background: rgba(26, 108, 255, 0.14);
-  border-color: rgba(26, 108, 255, 0.3);
-  color: #0052cc;
-}
-
 /* Main Body Area with Top Padding to clear the 64px Fixed Header */
 .public-main-content {
   flex: 1;
@@ -146,21 +123,21 @@
     padding: 0 16px;
     height: 60px;
   }
+
   .public-brand-title {
     font-size: 1.15rem;
   }
+
   .public-brand-subtitle {
     font-size: 0.68rem;
   }
+
   .public-brand-icon {
     width: 34px;
     height: 34px;
   }
+
   .public-main-content {
     padding: 78px 12px 32px;
-  }
-  .public-header-action {
-    padding: 6px 12px;
-    font-size: 0.82rem;
   }
 }

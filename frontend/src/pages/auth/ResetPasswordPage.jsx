@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowLeft, KeyRound } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../../../shared/toast/ToastProvider';
@@ -8,7 +8,6 @@ import './AuthPages.css';
 
 export default function ResetPasswordPage() {
   const location = useLocation();
-  const navigate = useNavigate();
   const toast = useToast();
   const { session, isRecoveryMode, loading: authLoading, updatePassword, signOut, clearRecoveryMode } = useAuth();
 
@@ -17,9 +16,7 @@ export default function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
 
   // Check URL parameters for explicit error codes (e.g. otp_expired)
   const params = new URLSearchParams(`${location.search}&${location.hash.replace(/^#/, '')}`);
@@ -37,20 +34,19 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitting || success) return;
-    setError('');
 
     if (!isValidRecoverySession) {
-      setError('No valid recovery session found. Please request a new recovery link.');
+      toast.error('No valid recovery session found. Please request a new recovery link.');
       return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+      toast.error('Password must be at least 8 characters long.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      toast.error('Passwords do not match.');
       return;
     }
 
@@ -58,27 +54,18 @@ export default function ResetPasswordPage() {
 
     try {
       await updatePassword(password);
-      const msg = 'Password changed successfully. You can now log in.';
-      setSuccessMessage(msg);
+      const msg = 'Password changed successfully! You can now go back to the login page and close this tab.';
       setSuccess(true);
-      toast.success(msg);
+      toast.success(msg, { duration: 8000 });
 
       // Security requirement: Ensure user is signed out so they are not automatically
       // logged into the dashboard, and must explicitly log in with the new password.
       await signOut();
       if (clearRecoveryMode) clearRecoveryMode();
-
-      // Automatically redirect to /login after ~2 seconds
-      setTimeout(() => {
-        navigate('/login', {
-          replace: true,
-          state: { passwordResetSuccess: true },
-        });
-      }, 2000);
     } catch (err) {
       const formatted = getAuthErrorMessage(err, 'resetPassword');
-      setError(formatted || err.message || 'Failed to update password. Please try again.');
-      toast.error('Could not update the password. Please try again.');
+      const errorMsg = formatted || err.message || 'Failed to update password. Please try again.';
+      toast.error(errorMsg);
       setSubmitting(false);
     }
   };
@@ -134,15 +121,6 @@ export default function ResetPasswordPage() {
             </p>
           </div>
 
-          <div className="auth-alert-error" role="alert">
-            <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
-            <span>
-              {isExpired
-                ? 'Password recovery links are time-sensitive and single-use.'
-                : 'Please request a new password recovery email to reset your account password.'}
-            </span>
-          </div>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
             <Link
               to="/forgot-password"
@@ -158,7 +136,7 @@ export default function ResetPasswordPage() {
               Request New Recovery Link
             </Link>
 
-            <div style={{ textAlign: 'center', marginTop: '8px' }}>
+            <div style={{ textAlign: 'center', marginTop: '10px' }}>
               <Link to="/login" className="auth-back-link">
                 <ArrowLeft size={16} />
                 <span>Return to Sign In</span>
@@ -170,7 +148,7 @@ export default function ResetPasswordPage() {
     );
   }
 
-  // 3. Valid Recovery Session Form
+  // 3. Valid Recovery Session Form or Success View
   return (
     <div className="auth-page-wrapper">
       <div className="auth-card">
@@ -183,26 +161,28 @@ export default function ResetPasswordPage() {
           </h1>
           <p className="auth-subtitle">
             {success
-              ? 'Your password has been changed. Redirecting to login...'
+              ? 'Now you can go back to the login page and close this tab.'
               : 'Enter and confirm your new account password below.'}
           </p>
         </div>
 
-        {error && (
-          <div className="auth-alert-error" role="alert">
-            <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
-            <span>{error}</span>
+        {success ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '12px' }}>
+            <Link
+              to="/login"
+              className="auth-btn-primary"
+              style={{
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxSizing: 'border-box',
+              }}
+            >
+              Go to Login Page
+            </Link>
           </div>
-        )}
-
-        {successMessage && (
-          <div className="auth-alert-success" role="status">
-            <CheckCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
-            <span>{successMessage}</span>
-          </div>
-        )}
-
-        {!success && (
+        ) : (
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="auth-field-group">
               <label htmlFor="new-password" className="auth-label">
@@ -275,17 +255,19 @@ export default function ResetPasswordPage() {
               className="auth-btn-primary"
               style={{ marginTop: '6px' }}
             >
-              {submitting ? 'Updating Password...' : 'Save New Password'}
+              {submitting ? 'Changing Password...' : 'Change Password'}
             </button>
           </form>
         )}
 
-        <div style={{ textAlign: 'center', marginTop: '18px' }}>
-          <Link to="/login" className="auth-back-link">
-            <ArrowLeft size={16} />
-            <span>Return to Sign In</span>
-          </Link>
-        </div>
+        {!success && (
+          <div style={{ textAlign: 'center', marginTop: '12px' }}>
+            <Link to="/login" className="auth-back-link">
+              <ArrowLeft size={16} />
+              <span>Return to Sign In</span>
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );

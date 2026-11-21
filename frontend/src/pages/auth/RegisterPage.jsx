@@ -222,7 +222,7 @@ export default function RegisterPage() {
             />
             <span>
               I agree to the{' '}
-              <Link to="/terms" target="_blank" className="auth-link">
+              <Link to="/terms" className="auth-link">
                 Terms and Conditions
               </Link>
             </span>

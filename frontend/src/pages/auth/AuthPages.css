@@ -247,7 +247,7 @@
 .auth-link {
   color: #1a6cff;
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 700;
   transition: color 0.15s ease;
 }
 
@@ -256,9 +256,17 @@
   color: #1355cf;
 }
 
+.auth-links-row .auth-link {
+  font-weight: 700;
+}
+
+.auth-footer .auth-link {
+  font-weight: 700;
+}
+
 .auth-link,
 .auth-back-link {
-  font-weight: 600;
+  font-weight: 700;
   text-underline-offset: 3px;
 }
 
@@ -399,9 +407,9 @@
   gap: 6px;
   color: #1a6cff;
   font-size: 0.88rem;
-  font-weight: 600;
+  font-weight: 700;
   text-decoration: none;
-  margin-top: 20px;
+  margin-top: 0;
   transition: color 0.15s ease;
 }
 

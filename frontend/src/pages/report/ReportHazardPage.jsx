@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Camera,
   FolderOpen,
   UploadCloud,
-  Image as ImageIcon,
   MapPin,
   RefreshCw,
   AlertTriangle,
@@ -16,6 +15,7 @@ import {
   Check,
   Send,
   ShieldAlert,
+  X,
 } from "lucide-react";
 import { submitHazardReport } from "../../services/api";
 import { useToast } from "../../../../shared/toast/ToastProvider";
@@ -55,12 +55,15 @@ export default function ReportHazardPage() {
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
 
-  // Automatically detect user GPS location on mount
-  useEffect(() => {
-    captureCurrentLocation();
-  }, []);
+  // Live in-browser camera state & refs
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [facingMode, setFacingMode] = useState("environment");
+  const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
-  const captureCurrentLocation = () => {
+  const captureCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setGpsStatus("error");
       setGpsErrorMsg("Geolocation is not supported by your browser or device.");
@@ -100,7 +103,12 @@ export default function ReportHazardPage() {
         maximumAge: 10000,
       }
     );
-  };
+  }, [toast]);
+
+  // Automatically detect user GPS location on mount
+  useEffect(() => {
+    captureCurrentLocation();
+  }, [captureCurrentLocation]);
 
   // Single upload dropzone state
   const [isDragging, setIsDragging] = useState(false);
@@ -148,6 +156,131 @@ export default function ReportHazardPage() {
     if (file) {
       processFile(file);
     }
+  };
+
+  // Handle opening live camera
+  const handleOpenCamera = () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.warning("Live camera access is not supported in this browser. Opening file selector.");
+      cameraInputRef.current?.click();
+      return;
+    }
+    setIsCameraActive(true);
+  };
+
+  // Manage live camera media stream lifecycle
+  useEffect(() => {
+    if (!isCameraActive) return;
+
+    let activeStream = null;
+    let isCancelled = false;
+
+    async function startCamera() {
+      try {
+        setIsCameraLoading(true);
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facingMode },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        });
+
+        if (isCancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        activeStream = stream;
+        streamRef.current = stream;
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
+
+        setIsCameraLoading(false);
+
+        // Check for multiple camera devices
+        const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+        const videoDevices = devices.filter((d) => d.kind === "videoinput");
+        setHasMultipleCameras(videoDevices.length > 1);
+      } catch (err) {
+        if (isCancelled) return;
+        console.warn("Camera access error:", err);
+        setIsCameraActive(false);
+        setIsCameraLoading(false);
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          toast.warning("Camera permission was denied. Opening file selector instead.");
+        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+          toast.warning("No camera device was detected. Opening file selector instead.");
+        } else {
+          toast.warning("Unable to open camera. Opening file selector instead.");
+        }
+        cameraInputRef.current?.click();
+      }
+    }
+
+    const currentVideo = videoRef.current;
+    startCamera();
+
+    return () => {
+      isCancelled = true;
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+      if (currentVideo) {
+        currentVideo.srcObject = null;
+      }
+    };
+  }, [isCameraActive, facingMode, toast]);
+
+  // Capture frame from live video feed
+  const handleCapturePhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, width, height);
+
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          toast.error("Failed to capture image. Please try again.");
+          return;
+        }
+        const file = new File(
+          [blob],
+          `road_hazard_${Date.now()}.jpg`,
+          { type: "image/jpeg" }
+        );
+        setIsCameraActive(false);
+        processFile(file);
+        toast.success("Photo captured successfully.");
+      },
+      "image/jpeg",
+      0.92
+    );
+  };
+
+  const handleCloseCamera = () => {
+    setIsCameraActive(false);
+  };
+
+  const handleSwitchCamera = () => {
+    setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
   };
 
   // Drag and drop handlers
@@ -411,7 +544,7 @@ export default function ReportHazardPage() {
                     <button
                       type="button"
                       className="upload-option-btn camera-option"
-                      onClick={() => cameraInputRef.current?.click()}
+                      onClick={handleOpenCamera}
                     >
                       <div className="option-icon-wrap camera-wrap">
                         <Camera size={18} strokeWidth={2.2} />
@@ -589,6 +722,96 @@ export default function ReportHazardPage() {
               </button>
             </div>
           </form>
+        )}
+
+        {/* Live Camera Viewfinder Modal */}
+        {isCameraActive && (
+          <div
+            className="camera-modal-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Camera Viewfinder"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) handleCloseCamera();
+            }}
+          >
+            <div className="camera-modal-card">
+              <div className="camera-modal-header">
+                <div className="camera-modal-title">
+                  <Camera size={18} />
+                  <span>Live Camera</span>
+                </div>
+                <button
+                  type="button"
+                  className="camera-modal-close"
+                  onClick={handleCloseCamera}
+                  aria-label="Close camera"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="camera-viewfinder-wrap">
+                {isCameraLoading && (
+                  <div className="camera-loading-overlay">
+                    <Loader2 size={32} className="spin-icon" />
+                    <span>Accessing camera...</span>
+                  </div>
+                )}
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="camera-video-preview"
+                />
+                <div className="camera-viewfinder-overlay">
+                  <div className="viewfinder-corner top-left" />
+                  <div className="viewfinder-corner top-right" />
+                  <div className="viewfinder-corner bottom-left" />
+                  <div className="viewfinder-corner bottom-right" />
+                  <span className="viewfinder-guide-text">
+                    Align road hazard within frame
+                  </span>
+                </div>
+              </div>
+
+              <div className="camera-controls-bar">
+                {hasMultipleCameras ? (
+                  <button
+                    type="button"
+                    className="camera-switch-btn"
+                    onClick={handleSwitchCamera}
+                    title="Switch Camera"
+                    aria-label="Switch Camera"
+                  >
+                    <RefreshCw size={18} />
+                  </button>
+                ) : (
+                  <div style={{ width: "44px" }} />
+                )}
+
+                <button
+                  type="button"
+                  className="camera-capture-btn"
+                  onClick={handleCapturePhoto}
+                  disabled={isCameraLoading}
+                  aria-label="Capture Photo"
+                  title="Capture Photo"
+                >
+                  <div className="camera-capture-inner" />
+                </button>
+
+                <button
+                  type="button"
+                  className="camera-cancel-btn"
+                  onClick={handleCloseCamera}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

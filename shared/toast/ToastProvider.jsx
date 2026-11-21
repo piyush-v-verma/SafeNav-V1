@@ -12,10 +12,10 @@ import './ToastProvider.css';
 const ToastContext = createContext(null);
 
 const DURATIONS = {
-  success: 4200,
-  error: 7000,
-  warning: 6000,
-  info: 4800,
+  success: 4000,
+  error: 4000,
+  warning: 4000,
+  info: 4000,
 };
 
 const TITLES = {
@@ -106,8 +106,8 @@ export function ToastProvider({ children, app = 'citizen' }) {
 
   const notify = useCallback((type, message, options = {}) => {
     if (!message) return;
-    const title = options.title || TITLES[type];
-    const duration = options.duration ?? DURATIONS[type];
+    const title = options.title !== undefined ? options.title : TITLES[type];
+    const duration = options.duration ?? DURATIONS[type] ?? 4000;
     const dedupeKey = options.dedupeKey || `${type}:${title}:${message}`;
     const now = Date.now();
     const lastShown = recent.current.get(dedupeKey) || 0;

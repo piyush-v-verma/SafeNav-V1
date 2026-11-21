@@ -54,3 +54,6 @@ backend/data/reports_store.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# Supabase local temporary files
+supabase/.temp/

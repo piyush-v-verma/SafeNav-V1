@@ -6,6 +6,10 @@ import { useToast } from '../../../../shared/toast/ToastProvider';
 import { getAuthErrorMessage } from '../../services/authErrors';
 import './AuthPages.css';
 
+const isValidEmail = (value) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
+};
+
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,7 +26,16 @@ export default function ForgotPasswordPage() {
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      setError('Please enter your registered email address.');
+      const msg = 'Please enter your registered email address.';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    if (!isValidEmail(trimmedEmail)) {
+      const msg = 'Please enter a valid email address (e.g. name@example.com).';
+      setError(msg);
+      toast.error(msg);
       return;
     }
 
@@ -33,7 +46,7 @@ export default function ForgotPasswordPage() {
       }
       setSubmittedEmail(trimmedEmail);
       setSubmitted(true);
-      toast.success('Password recovery email sent.');
+      toast.success("If an account exists with this email address, we'll send you a password recovery link.");
     } catch (err) {
       const message = getAuthErrorMessage(err, 'resetPassword');
       setError(message);
@@ -75,15 +88,30 @@ export default function ForgotPasswordPage() {
         {submitted ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             <div className="auth-alert-success" role="status">
-              <CheckCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+              <CheckCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
               <span>
-                If an account exists for <strong>{submittedEmail}</strong>, a recovery email has been sent. Please click the link inside to set a new password.
+                If an account exists with this email address (<strong>{submittedEmail}</strong>), we'll send you a password recovery link.
               </span>
             </div>
 
-            <p style={{ margin: 0, fontSize: '0.84rem', color: '#64748b', textAlign: 'center', lineHeight: 1.4 }}>
-              Didn't receive the email? Check your spam folder or try requesting again.
-            </p>
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                fontSize: '0.85rem',
+                color: '#475569',
+                lineHeight: 1.5,
+                textAlign: 'left',
+              }}
+            >
+              <p style={{ margin: '0 0 6px', fontWeight: 600, color: '#0f172a' }}>Next steps:</p>
+              <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <li>Check your inbox and click the recovery link to set a new password.</li>
+                <li>Be sure to check your spam or junk folder if the email does not arrive within a few minutes.</li>
+              </ul>
+            </div>
 
             <button
               type="button"
@@ -94,10 +122,17 @@ export default function ForgotPasswordPage() {
               className="auth-btn-social"
               style={{ justifyContent: 'center' }}
             >
-              Send to another email
+              Try another email
             </button>
 
-            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+            <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '0.85rem', color: '#64748b' }}>
+              Don't have an account?{' '}
+              <Link to="/register" className="auth-link">
+                Create Account
+              </Link>
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '10px' }}>
               <Link to="/login" className="auth-back-link">
                 <ArrowLeft size={16} />
                 <span>Return to Sign In</span>
@@ -105,7 +140,7 @@ export default function ForgotPasswordPage() {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSendRecoveryEmail} className="auth-form">
+          <form onSubmit={handleSendRecoveryEmail} className="auth-form" noValidate>
             <div className="auth-field-group">
               <label htmlFor="recovery-email" className="auth-label">
                 Registered Email Address
@@ -119,7 +154,10 @@ export default function ForgotPasswordPage() {
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (error) setError('');
+                  }}
                   placeholder="Enter your registered email"
                   className="auth-input"
                   autoComplete="email"
@@ -131,16 +169,23 @@ export default function ForgotPasswordPage() {
 
             <button
               type="submit"
-              disabled={loading || !email.trim() || !isConfigured}
+              disabled={loading || !isConfigured}
               className="auth-btn-primary"
             >
               {loading ? 'Sending Recovery Email...' : 'Send Recovery Email'}
             </button>
 
-            <div style={{ textAlign: 'center', marginTop: '18px' }}>
+            <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '0.85rem', color: '#64748b' }}>
+              Don't have an account?{' '}
+              <Link to="/register" className="auth-link">
+                Create Account
+              </Link>
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '10px' }}>
               <Link to="/login" className="auth-back-link">
                 <ArrowLeft size={16} />
-                <span>Back to Sign In</span>
+                <span>Return to Sign In</span>
               </Link>
             </div>
           </form>

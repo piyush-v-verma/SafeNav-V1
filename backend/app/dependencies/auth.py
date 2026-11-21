@@ -19,7 +19,7 @@ async def get_current_user(
     token = credentials.credentials
     payload = decode_supabase_jwt(token)
     user_id = payload.get("sub")
-    if not user_id:
+    if not isinstance(user_id, str) or not user_id.strip():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token payload is missing subject identifier ('sub')."
@@ -27,17 +27,10 @@ async def get_current_user(
 
     supabase = get_supabase_client()
     if not supabase:
-        # Development fallback if Supabase is not connected yet
-        email = payload.get("email", "unknown@user.com")
-        metadata = payload.get("user_metadata", {})
-        return {
-            "id": user_id,
-            "email": email,
-            "full_name": metadata.get("full_name", "Citizen"),
-            "mobile_number": metadata.get("mobile_number"),
-            "role": metadata.get("role", "user"),
-            "account_status": "active"
-        }
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication profile service is unavailable.",
+        )
 
     try:
         response = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
@@ -50,11 +43,17 @@ async def get_current_user(
         profile["email"] = payload.get("email", "")
         return profile
     except Exception as e:
-        logger.error(f"Error querying profiles table for user {user_id}: {e}")
-        # If record not found
+        if isinstance(e, HTTPException):
+            raise
+        if getattr(e, "code", None) == "PGRST116":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User profile not found in database.",
+            )
+        logger.error("Could not verify authenticated profile (%s)", type(e).__name__)
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not verify user profile."
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not verify user profile.",
         )
 
 async def require_active_user(
@@ -64,7 +63,7 @@ async def require_active_user(
     Verifies that the user profile has an active account status.
     Suspended users are blocked with HTTP 403.
     """
-    account_status = current_user.get("account_status", "active")
+    account_status = current_user.get("account_status")
     if account_status != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -78,7 +77,7 @@ async def require_admin(
     """
     Enforces that the current authenticated user has an 'admin' role.
     """
-    role = current_user.get("role", "user")
+    role = current_user.get("role")
     if role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
