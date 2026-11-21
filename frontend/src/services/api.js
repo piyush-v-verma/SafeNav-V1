@@ -220,3 +220,41 @@ export async function submitHazardReport({
 
   return response.json();
 }
+
+/**
+ * Check whether an email exists in Supabase Auth via FastAPI backend.
+ * Public pre-authentication check.
+ * POST /api/v1/auth/check-email
+ */
+export async function checkEmailRegistration(email) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/check-email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const error = new Error(data?.error?.message || `HTTP ${response.status}`);
+    error.status = response.status;
+    error.code = data?.error?.code || (
+      response.status === 422 ? 'VALIDATION_ERROR' :
+      response.status === 429 ? 'RATE_LIMIT_EXCEEDED' :
+      response.status === 503 ? 'AUTH_SERVICE_UNAVAILABLE' :
+      response.status === 500 ? 'INTERNAL_SERVER_ERROR' :
+      'UNKNOWN_ERROR'
+    );
+    throw error;
+  }
+
+  return data;
+}

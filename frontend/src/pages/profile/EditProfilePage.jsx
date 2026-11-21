@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { useToast } from '../../../../shared/toast/ToastProvider';
 
 export default function EditProfilePage() {
   const { profile, updateProfile } = useAuth();
+  const toast = useToast();
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [mobileNumber, setMobileNumber] = useState(profile?.mobile_number || '');
   const [loading, setLoading] = useState(false);
@@ -24,9 +26,11 @@ export default function EditProfilePage() {
         mobileNumber: mobileNumber.trim(),
       });
       setSuccess('Profile updated successfully!');
+      toast.success('Profile saved successfully.');
       setTimeout(() => navigate('/profile'), 1200);
     } catch (err) {
       setError(err.message || 'Failed to update profile.');
+      toast.error('Could not save profile changes. Please try again.');
     } finally {
       setLoading(false);
     }

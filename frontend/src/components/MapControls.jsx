@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, Minus } from "lucide-react";
+import { useToast } from "../../../shared/toast/ToastProvider";
 import "./MapControls.css";
 
 /**
@@ -19,8 +20,7 @@ export default function MapControls({
 }) {
   const [isLocating, setIsLocating] = useState(false);
   const [bearing, setBearing] = useState(0);
-  const [errorMessage, setErrorMessage] = useState(null);
-  const toastTimeoutRef = useRef(null);
+  const toast = useToast();
 
   // Synchronize bearing with MapLibre camera rotation
   useEffect(() => {
@@ -38,23 +38,9 @@ export default function MapControls({
     };
   }, [map]);
 
-  // Clear toast timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const showError = (msg) => {
-    setErrorMessage(msg);
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    toastTimeoutRef.current = setTimeout(() => {
-      setErrorMessage(null);
-    }, 6000);
+  const showError = (msg, isPermissionError = false) => {
+    if (isPermissionError) toast.warning(msg);
+    else toast.error(msg);
   };
 
   // 1. Handle "Your Location" GPS detection
@@ -70,7 +56,6 @@ export default function MapControls({
     }
 
     setIsLocating(true);
-    setErrorMessage(null);
 
     if (onGpsStatusChange) {
       onGpsStatusChange({ status: "detecting", accuracy: null });
@@ -130,7 +115,7 @@ export default function MapControls({
           onGpsStatusChange({ status: gpsStatus, accuracy: null });
         }
 
-        showError(userMessage);
+        showError(userMessage, gpsStatus === "denied");
       },
       options
     );
@@ -252,19 +237,6 @@ export default function MapControls({
         </div>
       </div>
 
-      {/* Geolocation Toast Message */}
-      {errorMessage && (
-        <div className="safenav-ctrl-toast" role="alert">
-          <span className="safenav-ctrl-toast-msg">{errorMessage}</span>
-          <button
-            className="safenav-ctrl-toast-close"
-            onClick={() => setErrorMessage(null)}
-            aria-label="Dismiss error"
-          >
-            ✕
-          </button>
-        </div>
-      )}
     </>
   );
 }

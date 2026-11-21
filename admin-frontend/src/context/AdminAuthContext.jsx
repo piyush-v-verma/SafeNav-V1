@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
+import { useToast } from '../../../shared/toast/ToastProvider';
 
 const AdminAuthContext = createContext(null);
 
@@ -9,6 +10,9 @@ export function AdminAuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const { warning } = useToast();
+  const sessionRef = useRef(null);
+  const manualSignOutAtRef = useRef(0);
 
   const verifyAdminRole = async (userId, userEmail) => {
     if (!isSupabaseConfigured || !userId) {
@@ -31,6 +35,7 @@ export function AdminAuthProvider({ children }) {
 
       if (!data || data.role !== 'admin') {
         // Deny access to citizens
+        manualSignOutAtRef.current = Date.now();
         await supabase.auth.signOut();
         setProfile(null);
         setUser(null);
@@ -40,6 +45,7 @@ export function AdminAuthProvider({ children }) {
       }
 
       if (data.account_status !== 'active') {
+        manualSignOutAtRef.current = Date.now();
         await supabase.auth.signOut();
         setProfile(null);
         setUser(null);
@@ -65,18 +71,32 @@ export function AdminAuthProvider({ children }) {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        verifyAdminRole(session.user.id, session.user.email).finally(() => setLoading(false));
-      } else {
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        sessionRef.current = session;
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          verifyAdminRole(session.user.id, session.user.email).finally(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        sessionRef.current = null;
+        setSession(null);
+        setUser(null);
+        setProfile(null);
         setLoading(false);
-      }
-    });
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
+        const previousSession = sessionRef.current;
+        sessionRef.current = currentSession;
+        if (event === 'SIGNED_OUT' && previousSession && Date.now() - manualSignOutAtRef.current > 3000) {
+          warning('Your admin session has ended. Sign in again.', { dedupeKey: 'admin-session-ended' });
+        }
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         if (currentSession?.user) {
@@ -110,7 +130,13 @@ export function AdminAuthProvider({ children }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+      manualSignOutAtRef.current = Date.now();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        manualSignOutAtRef.current = 0;
+        throw error;
+      }
+      sessionRef.current = null;
     setSession(null);
     setUser(null);
     setProfile(null);

@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { fetchUsersList, updateUserAccountStatus } from '../services/adminApi';
+import { useToast } from '../../../shared/toast/ToastProvider';
 
 export default function UsersManagementPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
+  const toast = useToast();
 
   const loadUsers = () => {
     setLoading(true);
@@ -16,13 +18,15 @@ export default function UsersManagementPage() {
       })
       .catch((err) => {
         setError(err.message);
+        const unauthorized = /401|403|unauthorized|access denied/i.test(err.message || '');
+        toast.error(unauthorized ? 'Your administrator access has expired. Sign in again.' : 'Could not load citizen accounts. Please try again.', { dedupeKey: 'admin-users-load-error' });
         setLoading(false);
       });
   };
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [toast]);
 
   const handleToggleStatus = async (user) => {
     const nextStatus = user.account_status === 'active' ? 'suspended' : 'active';
@@ -36,8 +40,10 @@ export default function UsersManagementPage() {
       setUsers((prev) =>
         prev.map((u) => (u.id === user.id ? { ...u, account_status: nextStatus } : u))
       );
+      toast.success('Citizen account status updated.');
     } catch (err) {
-      alert(`Error updating user status: ${err.message}`);
+      const unauthorized = /401|403|unauthorized|access denied/i.test(err.message || '');
+      toast.error(unauthorized ? 'You are not authorized to change this account.' : 'Could not update the citizen account status. Please try again.');
     } finally {
       setActionLoading(null);
     }

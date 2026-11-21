@@ -17,9 +17,8 @@ export default function ProtectedRoute({ children }) {
     );
   }
 
-  // If Supabase is not configured yet in local development, allow guest access with a banner
   if (!isConfigured) {
-    return children;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (!user) {

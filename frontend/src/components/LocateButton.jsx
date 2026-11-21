@@ -1,28 +1,14 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
+import { useToast } from "../../../shared/toast/ToastProvider";
 import "./LocateButton.css";
 
 export default function LocateButton({ onLocationFound, onGpsStatusChange }) {
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState(null);
-  const toastTimeoutRef = useRef(null);
+  const toast = useToast();
 
-  // Clear toast timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const showError = (msg) => {
-    setErrorMessage(msg);
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    toastTimeoutRef.current = setTimeout(() => {
-      setErrorMessage(null);
-    }, 6000);
+  const showError = (msg, isPermissionError = false) => {
+    if (isPermissionError) toast.warning(msg);
+    else toast.error(msg);
   };
 
   const handleLocateMe = () => {
@@ -38,7 +24,6 @@ export default function LocateButton({ onLocationFound, onGpsStatusChange }) {
     }
 
     setIsLoading(true);
-    setErrorMessage(null);
 
     if (onGpsStatusChange) {
       onGpsStatusChange({ status: "detecting", accuracy: null });
@@ -66,6 +51,7 @@ export default function LocateButton({ onLocationFound, onGpsStatusChange }) {
             accuracy,
           });
         }
+        toast.success("Current location retrieved.");
       },
       (error) => {
         setIsLoading(false);
@@ -99,7 +85,7 @@ export default function LocateButton({ onLocationFound, onGpsStatusChange }) {
           onGpsStatusChange({ status: gpsStatus, accuracy: null });
         }
 
-        showError(userMessage);
+        showError(userMessage, gpsStatus === "denied");
       },
       options
     );
@@ -138,18 +124,6 @@ export default function LocateButton({ onLocationFound, onGpsStatusChange }) {
         </button>
       </div>
 
-      {errorMessage && (
-        <div className="locate-toast" role="alert">
-          <span className="locate-toast-msg">{errorMessage}</span>
-          <button
-            className="locate-toast-close"
-            onClick={() => setErrorMessage(null)}
-            aria-label="Dismiss error"
-          >
-            ✕
-          </button>
-        </div>
-      )}
     </>
   );
 }

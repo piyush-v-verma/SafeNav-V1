@@ -2,8 +2,11 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import geopandas as gpd
 import networkx as nx
 import osmnx as ox
@@ -139,6 +142,24 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_request_validation_error(request: Request, exc: RequestValidationError):
+    # Keep this endpoint's public error contract consistent without changing
+    # validation responses for any existing API routes.
+    if request.url.path == "/api/v1/auth/check-email":
+        return JSONResponse(
+            status_code=422,
+            content={
+                "success": False,
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "A JSON body with a valid email address is required.",
+                },
+            },
+        )
+    return await request_validation_exception_handler(request, exc)
 
 # CORS configuration supporting both citizen app (5173) and admin console (5174)
 app.add_middleware(

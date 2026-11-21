@@ -17,11 +17,7 @@ export default function AdminProtectedRoute({ children }) {
     );
   }
 
-  if (!isConfigured) {
-    return children;
-  }
-
-  if (!user || profile?.role !== 'admin') {
+  if (!isConfigured || !user || profile?.role !== 'admin') {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

@@ -1,9 +1,21 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { useToast } from '../../../../shared/toast/ToastProvider';
 
 export default function ProfilePage() {
-  const { user, profile } = useAuth();
+  const { user, profile, signOut } = useAuth();
+  const navigate = useNavigate();
+  const toast = useToast();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      navigate('/login', { replace: true });
+    } catch {
+      toast.error('Could not sign out. Please try again.');
+    }
+  };
 
   return (
     <div style={{
@@ -125,7 +137,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <Link
             to="/my-reports"
             style={{
@@ -154,6 +166,9 @@ export default function ProfilePage() {
           >
             🗺️ Back to Map
           </Link>
+          <button type="button" onClick={handleSignOut} style={{ padding: '10px 18px', background: '#334155', color: '#f8fafc', border: '1px solid #475569', borderRadius: '6px', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' }}>
+            Sign Out
+          </button>
         </div>
       </div>
     </div>

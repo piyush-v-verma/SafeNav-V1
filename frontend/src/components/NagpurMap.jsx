@@ -20,6 +20,7 @@ import NavigationHUD from "./NavigationHUD";
 import PlaceDetailCard from "./PlaceDetailCard";
 import LocationPromptModal from "./LocationPromptModal";
 import { checkLocationCoverage, calculateRoute } from "../services/api";
+import { useToast } from "../../../shared/toast/ToastProvider";
 
 // Configure worker once before creating the map
 setWorkerUrl(workerUrl);
@@ -62,6 +63,7 @@ function getRouteInitialBearing(route) {
 }
 
 export default function NagpurMap() {
+  const toast = useToast();
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
   const selectedMarkerRef = useRef(null);
@@ -127,6 +129,7 @@ export default function NagpurMap() {
       })
       .catch((err) => {
         console.warn("Coverage recalculation failed:", err.message);
+        toast.error("Unable to verify road coverage right now.", { dedupeKey: "coverage-check-error" });
         setCoverageStatus("unknown");
         if (currentLocationMarkerRef.current) {
           const fallbackPopup = new Popup({ offset: 25 }).setHTML(
@@ -138,16 +141,20 @@ export default function NagpurMap() {
       .finally(() => {
         isCoverageCheckingRef.current = false;
       });
-  }, []);
+  }, [toast]);
 
   // Handle backend connection lifecycle transitions
   const handleBackendStatusChange = useCallback(
     (newStatus, prevStatus) => {
       if (newStatus === "connected" && prevStatus !== "connected") {
+        if (prevStatus !== null) toast.success("Connection to SafeNav services restored.", { dedupeKey: "backend-restored" });
         if (latestGpsCoordsRef.current) {
           recalculateCoverage(latestGpsCoordsRef.current);
         }
       } else if (newStatus === "disconnected" || newStatus === "degraded") {
+        if (prevStatus !== newStatus) {
+          toast.error(newStatus === "degraded" ? "Navigation services are available without road-network data." : "Cannot reach SafeNav navigation services.", { dedupeKey: `backend-${newStatus}` });
+        }
         setCoverageStatus("unknown");
         if (currentLocationMarkerRef.current && latestGpsCoordsRef.current) {
           const offlinePopup = new Popup({ offset: 25 }).setHTML(
@@ -157,7 +164,7 @@ export default function NagpurMap() {
         }
       }
     },
-    [recalculateCoverage]
+    [recalculateCoverage, toast]
   );
 
   // Initialize MapLibre Map
@@ -336,6 +343,7 @@ export default function NagpurMap() {
         });
 
         setRouteData(res);
+        toast.success("Route ready.", { dedupeKey: "route-ready" });
 
         // Render both Access Connections and Road Route on MapLibre map
         if (mapRef.current) {
@@ -407,6 +415,7 @@ export default function NagpurMap() {
       } catch (err) {
         console.error("Route calculation failed:", err);
         setRouteError(err.message || "Failed to calculate road route.");
+        toast.error("Could not create this route. Check the route details and try again.", { dedupeKey: "route-calculation-error" });
         setRouteData(null);
         if (mapRef.current) {
           const routeSource = mapRef.current.getSource("safenav-route-source");
@@ -422,7 +431,7 @@ export default function NagpurMap() {
         setIsRouteLoading(false);
       }
     },
-    []
+    [toast]
   );
 
   // Handle Directions button click from destination popup
@@ -614,6 +623,7 @@ export default function NagpurMap() {
       })
       .catch((err) => {
         console.warn("Place coverage check failed:", err.message);
+        toast.error("Unable to verify this place's road coverage.", { dedupeKey: "place-coverage-error" });
         setSelectedPlaceCoverage({ supported: true });
       })
       .finally(() => {
@@ -737,6 +747,7 @@ export default function NagpurMap() {
     // Preserve latest valid GPS reading
     latestGpsCoordsRef.current = { latitude, longitude, accuracy };
     setGpsState({ status: "detected", accuracy });
+    toast.success("Current location retrieved.", { dedupeKey: "location-retrieved" });
 
     // Center map or follow user during active navigation
     if (isNavigating) {
@@ -792,7 +803,9 @@ export default function NagpurMap() {
 
   const handleLocationPromptTurnOn = useCallback(() => {
     if (!navigator.geolocation) {
-      setLocationPromptError("Geolocation is not supported by your browser.");
+      const message = "Geolocation is not supported by your browser.";
+      setLocationPromptError(message);
+      toast.error(message, { dedupeKey: "location-unavailable" });
       return;
     }
 
@@ -827,17 +840,17 @@ export default function NagpurMap() {
         setIsDetectingLocation(false);
         setGpsState({ status: "denied", accuracy: null });
         if (err.code === 1) {
-          setLocationPromptError(
-            "Location permission was denied. Please allow location access in your browser settings to continue."
-          );
+          const message = "Location permission was denied. Please allow location access in your browser settings to continue.";
+          setLocationPromptError(message);
+          toast.warning(message, { dedupeKey: "location-permission-denied" });
         } else if (err.code === 3) {
-          setLocationPromptError(
-            "Location request timed out. Please check your GPS signal and try again."
-          );
+          const message = "Location request timed out. Please check your GPS signal and try again.";
+          setLocationPromptError(message);
+          toast.error(message, { dedupeKey: "location-timeout" });
         } else {
-          setLocationPromptError(
-            "Unable to retrieve your location. Please ensure device location is enabled."
-          );
+          const message = "Unable to retrieve your location. Please ensure device location is enabled.";
+          setLocationPromptError(message);
+          toast.error(message, { dedupeKey: "location-unavailable" });
         }
       },
       {
@@ -846,7 +859,7 @@ export default function NagpurMap() {
         maximumAge: 10000,
       }
     );
-  }, [handleCurrentLocationFound, selectedPlace, selectedDestination, travelMode, triggerRouteCalculation]);
+  }, [handleCurrentLocationFound, selectedPlace, selectedDestination, travelMode, toast, triggerRouteCalculation]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>

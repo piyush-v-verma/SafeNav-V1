@@ -1,118 +1,58 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Shield, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Shield, Mail, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useToast } from '../../../../shared/toast/ToastProvider';
+import { getAuthErrorMessage } from '../../services/authErrors';
 import './AuthPages.css';
 
+const isValidEmail = (value) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
+};
+
 export default function ForgotPasswordPage() {
-  const [identifier, setIdentifier] = useState('');
-  const [otp, setOtp] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
-  const [updatingPassword, setUpdatingPassword] = useState(false);
-
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState('');
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
-  const { sendPasswordResetOtp, verifyOtp, updatePassword, resetPassword, isConfigured } = useAuth();
-  const navigate = useNavigate();
+  const { resetPassword, isConfigured } = useAuth();
+  const toast = useToast();
 
-  // Step 1: Send OTP to Email or Phone
-  const handleSendOtp = async (e) => {
+  const handleSendRecoveryEmail = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccessMsg('');
 
-    if (!identifier.trim()) {
-      setError('Please enter your email or phone number.');
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      const msg = 'Please enter your registered email address.';
+      setError(msg);
+      toast.error(msg);
       return;
     }
 
-    setSendingOtp(true);
+    if (!isValidEmail(trimmedEmail)) {
+      const msg = 'Please enter a valid email address (e.g. name@example.com).';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    setLoading(true);
     try {
       if (isConfigured) {
-        if (identifier.includes('@')) {
-          await resetPassword(identifier.trim());
-        } else if (sendPasswordResetOtp) {
-          await sendPasswordResetOtp(identifier.trim());
-        }
+        await resetPassword(trimmedEmail);
       }
-      setOtpSent(true);
-      setSuccessMsg('OTP code sent successfully! Check your inbox or SMS.');
+      setSubmittedEmail(trimmedEmail);
+      setSubmitted(true);
+      toast.success("If an account exists with this email address, we'll send you a password recovery link.");
     } catch (err) {
-      // In dev mode with mock credentials or notice
-      setError(err.message || 'Failed to send OTP. Please check your credentials.');
+      const message = getAuthErrorMessage(err, 'resetPassword');
+      setError(message);
+      toast.error(message);
     } finally {
-      setSendingOtp(false);
-    }
-  };
-
-  // Step 2: Verify OTP
-  const handleVerifyOtp = async () => {
-    setError('');
-    setSuccessMsg('');
-
-    if (!otp.trim()) {
-      setError('Please enter the OTP received.');
-      return;
-    }
-
-    setVerifyingOtp(true);
-    try {
-      if (isConfigured && verifyOtp) {
-        await verifyOtp(identifier.trim(), otp.trim());
-      }
-      setOtpVerified(true);
-      setSuccessMsg('OTP verified successfully! Now choose your new password.');
-    } catch (err) {
-      // If mock/testing or Supabase verification error
-      setError(err.message || 'Invalid or expired OTP. Please try again.');
-    } finally {
-      setVerifyingOtp(false);
-    }
-  };
-
-  // Step 3: Update Password
-  const handleUpdatePassword = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccessMsg('');
-
-    if (!otpVerified && isConfigured) {
-      setError('Please verify the OTP first before updating password.');
-      return;
-    }
-
-    if (!newPassword || newPassword.length < 8) {
-      setError('New password must be at least 8 characters long.');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-
-    setUpdatingPassword(true);
-    try {
-      if (isConfigured) {
-        await updatePassword(newPassword);
-      }
-      setSuccessMsg('Password updated successfully! Redirecting to login...');
-      setTimeout(() => {
-        navigate('/login');
-      }, 1800);
-    } catch (err) {
-      setError(err.message || 'Failed to update password. Please try again.');
-    } finally {
-      setUpdatingPassword(false);
+      setLoading(false);
     }
   };
 
@@ -124,8 +64,12 @@ export default function ForgotPasswordPage() {
           <div className="auth-badge">
             <Shield strokeWidth={2.4} />
           </div>
-          <h1 className="auth-title">Change Password</h1>
-          <p className="auth-subtitle">Verify your credentials to set a new password.</p>
+          <h1 className="auth-title">Forgot Password</h1>
+          <p className="auth-subtitle">
+            {submitted
+              ? 'Check your inbox for password recovery instructions.'
+              : 'Enter your registered email to receive a password recovery link.'}
+          </p>
         </div>
 
         {!isConfigured && (
@@ -135,147 +79,117 @@ export default function ForgotPasswordPage() {
         )}
 
         {error && (
-          <div className="auth-alert-error">
+          <div className="auth-alert-error" role="alert">
             <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
             <span>{error}</span>
           </div>
         )}
 
-        {successMsg && (
-          <div className="auth-alert-success">
-            <CheckCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
-            <span>{successMsg}</span>
+        {submitted ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
+            <div className="auth-alert-success" role="status">
+              <CheckCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+              <span>
+                If an account exists with this email address (<strong>{submittedEmail}</strong>), we'll send you a password recovery link.
+              </span>
+            </div>
+
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                fontSize: '0.85rem',
+                color: '#475569',
+                lineHeight: 1.5,
+                textAlign: 'left',
+              }}
+            >
+              <p style={{ margin: '0 0 6px', fontWeight: 600, color: '#0f172a' }}>Next steps:</p>
+              <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <li>Check your inbox and click the recovery link to set a new password.</li>
+                <li>Be sure to check your spam or junk folder if the email does not arrive within a few minutes.</li>
+              </ul>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSubmitted(false);
+                setError('');
+              }}
+              className="auth-btn-social"
+              style={{ justifyContent: 'center' }}
+            >
+              Try another email
+            </button>
+
+            <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '0.85rem', color: '#64748b' }}>
+              Don't have an account?{' '}
+              <Link to="/register" className="auth-link">
+                Create Account
+              </Link>
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '10px' }}>
+              <Link to="/login" className="auth-back-link">
+                <ArrowLeft size={16} />
+                <span>Return to Sign In</span>
+              </Link>
+            </div>
           </div>
+        ) : (
+          <form onSubmit={handleSendRecoveryEmail} className="auth-form" noValidate>
+            <div className="auth-field-group">
+              <label htmlFor="recovery-email" className="auth-label">
+                Registered Email Address
+              </label>
+              <div className="auth-input-container">
+                <span className="auth-input-icon">
+                  <Mail size={18} />
+                </span>
+                <input
+                  id="recovery-email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (error) setError('');
+                  }}
+                  placeholder="Enter your registered email"
+                  className="auth-input"
+                  autoComplete="email"
+                  disabled={loading}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || !isConfigured}
+              className="auth-btn-primary"
+            >
+              {loading ? 'Sending Recovery Email...' : 'Send Recovery Email'}
+            </button>
+
+            <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '0.85rem', color: '#64748b' }}>
+              Don't have an account?{' '}
+              <Link to="/register" className="auth-link">
+                Create Account
+              </Link>
+            </div>
+
+            <div style={{ textAlign: 'center', marginTop: '10px' }}>
+              <Link to="/login" className="auth-back-link">
+                <ArrowLeft size={16} />
+                <span>Return to Sign In</span>
+              </Link>
+            </div>
+          </form>
         )}
-
-        <form onSubmit={handleUpdatePassword} className="auth-form">
-          {/* Field 1: Email or Phone Number */}
-          <div className="auth-field-group">
-            <div className="auth-input-container">
-              <span className="auth-input-icon">
-                <Mail />
-              </span>
-              <input
-                type="text"
-                required
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="Email or Phone Number"
-                className="auth-input"
-                disabled={otpVerified}
-              />
-            </div>
-          </div>
-
-          {/* Send OTP Button */}
-          <button
-            type="button"
-            onClick={handleSendOtp}
-            disabled={sendingOtp || otpVerified || !identifier.trim()}
-            className="auth-btn-primary"
-            style={{ marginBottom: '6px' }}
-          >
-            {sendingOtp ? 'Sending OTP...' : otpSent ? 'Resend OTP' : 'Send OTP'}
-          </button>
-
-          {/* Field 2: Enter OTP with inline Verify button */}
-          <div className="auth-field-group">
-            <div className="auth-input-container">
-              <span className="auth-input-icon">
-                <Lock />
-              </span>
-              <input
-                type="text"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="Enter OTP"
-                className="auth-input"
-                disabled={otpVerified}
-                style={{ letterSpacing: otp ? '0.15em' : 'normal' }}
-              />
-              <button
-                type="button"
-                onClick={handleVerifyOtp}
-                disabled={verifyingOtp || otpVerified || !otp.trim()}
-                className={`auth-input-inline-btn ${otpVerified ? 'verified' : ''}`}
-              >
-                {verifyingOtp ? 'Verifying...' : otpVerified ? 'Verified ✓' : 'Verify'}
-              </button>
-            </div>
-          </div>
-
-          {/* Field 3: New Password */}
-          <div className="auth-field-group">
-            <div className="auth-input-container">
-              <span className="auth-input-icon">
-                <Lock />
-              </span>
-              <input
-                type={showNewPassword ? 'text' : 'password'}
-                required
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="New Password"
-                className="auth-input"
-                autoComplete="new-password"
-                style={{ paddingRight: '40px' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPassword(!showNewPassword)}
-                className="auth-password-toggle"
-                aria-label={showNewPassword ? 'Hide password' : 'Show password'}
-              >
-                {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          {/* Field 4: Confirm New Password */}
-          <div className="auth-field-group">
-            <div className="auth-input-container">
-              <span className="auth-input-icon">
-                <Lock />
-              </span>
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm New Password"
-                className="auth-input"
-                autoComplete="new-password"
-                style={{ paddingRight: '40px' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="auth-password-toggle"
-                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-              >
-                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          {/* Field 5: Update Password Button */}
-          <button
-            type="submit"
-            disabled={updatingPassword || (!otpVerified && isConfigured)}
-            className="auth-btn-primary"
-            style={{ marginTop: '4px' }}
-          >
-            {updatingPassword ? 'Updating Password...' : 'Update Password'}
-          </button>
-        </form>
-
-        {/* Footer: ← Back to Login */}
-        <div style={{ textAlign: 'center', marginTop: '16px' }}>
-          <Link to="/login" className="auth-back-link">
-            <ArrowLeft size={16} />
-            <span>Back to Login</span>
-          </Link>
-        </div>
       </div>
     </div>
   );

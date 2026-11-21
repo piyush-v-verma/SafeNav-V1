@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
+import { useToast } from '../../../shared/toast/ToastProvider';
 
 const AuthContext = createContext(null);
 
@@ -8,6 +9,10 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const { warning, success } = useToast();
+  const sessionRef = useRef(null);
+  const manualSignOutAtRef = useRef(0);
 
   // Fetch PostgreSQL profile from public.profiles
   const fetchProfile = async (userId, userEmail) => {
@@ -47,26 +52,49 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id, session.user.email);
-      }
-      setLoading(false);
-    });
+    // Check if current URL hash or path indicates password recovery
+    const isRecoveryUrl =
+      typeof window !== 'undefined' &&
+      (window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password');
+    if (isRecoveryUrl) {
+      setIsRecoveryMode(true);
+    }
 
-    // Listen for auth state changes
+    // Initial session check
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        sessionRef.current = session;
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (isRecoveryUrl || window.location.hash.includes('type=recovery')) {
+          setIsRecoveryMode(true);
+        }
+      })
+      .catch(() => {
+        sessionRef.current = null;
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+      })
+      .finally(() => setLoading(false));
+
+    // Listen for auth state changes synchronously (no async profile blocking in callback)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, currentSession) => {
+      (event, currentSession) => {
+        const previousSession = sessionRef.current;
+        sessionRef.current = currentSession;
+
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsRecoveryMode(true);
+        } else if (event === 'SIGNED_OUT') {
+          setIsRecoveryMode(false);
+          if (previousSession && Date.now() - manualSignOutAtRef.current > 3000) {
+            warning('Your session has ended. Sign in again to continue.', { dedupeKey: 'citizen-session-ended' });
+          }
+        }
+
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
-        if (currentSession?.user) {
-          await fetchProfile(currentSession.user.id, currentSession.user.email);
-        } else {
-          setProfile(null);
-        }
         setLoading(false);
       }
     );
@@ -74,14 +102,38 @@ export function AuthProvider({ children }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [warning]);
+
+  // Separate, non-blocking profile synchronization triggered by user changes
+  useEffect(() => {
+    if (!isSupabaseConfigured || !user?.id) {
+      setProfile(null);
+      return;
+    }
+
+    // Skip normal citizen profile fetch during recovery flow
+    if (isRecoveryMode || (typeof window !== 'undefined' && window.location.pathname === '/reset-password')) {
+      return;
+    }
+
+    let isMounted = true;
+    fetchProfile(user.id, user.email).then((userProf) => {
+      if (isMounted && userProf) {
+        setProfile(userProf);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, user?.email, isRecoveryMode]);
 
   const signIn = async (email, password) => {
     if (!isSupabaseConfigured) {
       throw new Error('Supabase is not configured yet. Please configure frontend/.env first.');
     }
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
     if (error) throw error;
@@ -93,7 +145,7 @@ export function AuthProvider({ children }) {
       throw new Error('Supabase is not configured yet. Please configure frontend/.env first.');
     }
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: email.trim(),
       password,
       options: {
         data: {
@@ -106,6 +158,18 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const resendSignUpVerification = async (email) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured yet. Please configure frontend/.env first.');
+    }
+    const { data, error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+    });
+    if (error) throw error;
+    return data;
+  };
+
   const signOut = async () => {
     if (!isSupabaseConfigured) {
       setUser(null);
@@ -113,11 +177,19 @@ export function AuthProvider({ children }) {
       setProfile(null);
       return;
     }
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    setSession(null);
-    setUser(null);
-    setProfile(null);
+    manualSignOutAtRef.current = Date.now();
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      sessionRef.current = null;
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      success('You have been signed out.');
+    } catch (error) {
+      manualSignOutAtRef.current = 0;
+      throw error;
+    }
   };
 
   const signInWithGoogle = async () => {
@@ -206,15 +278,22 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const clearRecoveryMode = () => {
+    setIsRecoveryMode(false);
+  };
+
   const value = {
     session,
     user,
     profile,
     loading,
     isConfigured: isSupabaseConfigured,
+    isRecoveryMode,
+    clearRecoveryMode,
     signIn,
     signInWithGoogle,
     signUp,
+    resendSignUpVerification,
     signOut,
     resetPassword,
     sendPasswordResetOtp,

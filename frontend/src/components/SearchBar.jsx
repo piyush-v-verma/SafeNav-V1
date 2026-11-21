@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useToast } from "../../../shared/toast/ToastProvider";
 import "./SearchBar.css";
 
 // Search configuration
@@ -11,6 +12,7 @@ export default function SearchBar({ onSelectLocation, onClear, onInputChange }) 
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const toast = useToast();
 
   const containerRef = useRef(null);
   const debounceTimerRef = useRef(null);
@@ -92,6 +94,7 @@ export default function SearchBar({ onSelectLocation, onClear, onInputChange }) 
       .catch((err) => {
         if (err.name !== "AbortError") {
           console.error("Photon search error:", err);
+          toast.error("Location search is unavailable. Please try again.", { dedupeKey: "photon-search-error" });
           setSuggestions([]);
         }
       })
@@ -175,6 +178,7 @@ export default function SearchBar({ onSelectLocation, onClear, onInputChange }) 
       .catch((err) => {
         if (err.name !== "AbortError") {
           console.error("Photon enter search error:", err);
+          toast.error("Location search is unavailable. Please try again.", { dedupeKey: "photon-search-error" });
         }
       })
       .finally(() => {

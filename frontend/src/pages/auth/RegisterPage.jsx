@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shield, User, Mail, Phone, Lock, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
+import { Shield, User, Mail, Phone, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { getAuthErrorMessage } from '../../services/authErrors';
+import { useToast } from '../../../../shared/toast/ToastProvider';
 import './AuthPages.css';
 
 export default function RegisterPage() {
@@ -15,19 +17,23 @@ export default function RegisterPage() {
   const [agreeTerms, setAgreeTerms] = useState(false);
 
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
   const { signUp, isConfigured } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccessMsg('');
 
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
+      return;
+    }
+
+    if (!fullName.trim() || !email.trim()) {
+      setError('Enter your full name and email address.');
       return;
     }
 
@@ -50,14 +56,19 @@ export default function RegisterPage() {
       });
 
       if (data?.session) {
+        toast.success('Your SafeNav account is ready.');
         navigate('/', { replace: true });
       } else {
-        setSuccessMsg(
-          'Registration successful! Please check your email to verify your account, then log in.'
-        );
+        toast.info('Check your email for a verification link before signing in.');
+        navigate('/login', {
+          replace: true,
+          state: { registrationPending: true, email: email.trim() },
+        });
       }
     } catch (err) {
-      setError(err.message || 'Registration failed. Please check your details and try again.');
+      const message = getAuthErrorMessage(err, 'signup');
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -85,13 +96,6 @@ export default function RegisterPage() {
           <div className="auth-alert-error">
             <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
             <span>{error}</span>
-          </div>
-        )}
-
-        {successMsg && (
-          <div className="auth-alert-success">
-            <CheckCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
-            <span>{successMsg}</span>
           </div>
         )}
 
@@ -218,7 +222,7 @@ export default function RegisterPage() {
             />
             <span>
               I agree to the{' '}
-              <Link to="/terms" target="_blank" className="auth-link">
+              <Link to="/terms" className="auth-link">
                 Terms and Conditions
               </Link>
             </span>

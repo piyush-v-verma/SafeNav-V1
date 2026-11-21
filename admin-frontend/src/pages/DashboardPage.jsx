@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { fetchDashboardMetrics } from '../services/adminApi';
+import { useToast } from '../../../shared/toast/ToastProvider';
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const toast = useToast();
 
   useEffect(() => {
     fetchDashboardMetrics()
@@ -14,9 +16,11 @@ export default function DashboardPage() {
       })
       .catch((err) => {
         setError(err.message);
+        const unauthorized = /401|403|unauthorized|access denied/i.test(err.message || '');
+        toast.error(unauthorized ? 'Your administrator access has expired. Sign in again.' : 'Could not load dashboard data. Please try again.', { dedupeKey: 'admin-dashboard-load-error' });
         setLoading(false);
       });
-  }, []);
+  }, [toast]);
 
   const statCards = [
     { title: 'Total Registered Citizens', value: metrics?.total_users ?? '—', icon: '👥', color: '#38bdf8' },

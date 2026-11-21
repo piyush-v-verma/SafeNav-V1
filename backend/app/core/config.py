@@ -22,7 +22,20 @@ class Settings:
     # Supabase configuration
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
-    SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", "")
+    _supabase_base_url: str = SUPABASE_URL.rstrip("/")
+    SUPABASE_JWKS_URL: str = (
+        os.getenv("SUPABASE_JWKS_URL", "").strip()
+        or f"{_supabase_base_url}/auth/v1/.well-known/jwks.json"
+    )
+    SUPABASE_JWT_ISSUER: str = (
+        os.getenv("SUPABASE_JWT_ISSUER", "").strip()
+        or f"{_supabase_base_url}/auth/v1"
+    )
+    SUPABASE_JWT_AUDIENCE: str = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated").strip() or "authenticated"
+    SUPABASE_JWKS_ALLOW_INSECURE_LOCAL: bool = (
+        os.getenv("SUPABASE_JWKS_ALLOW_INSECURE_LOCAL", "false").strip().lower()
+        in ("1", "true", "yes")
+    )
 
     # Paths
     GRAPH_FILEPATH: Path = BASE_DIR / "data" / "processed" / "nagpur_roads.graphml"

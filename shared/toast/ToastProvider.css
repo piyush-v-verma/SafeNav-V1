@@ -1,0 +1,159 @@
+.sn-toast-viewport {
+  position: fixed;
+  z-index: 99999;
+  top: max(20px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: visible;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.sn-toast-viewport[data-app="admin"] {
+  top: max(76px, calc(env(safe-area-inset-top) + 64px));
+  right: max(20px, env(safe-area-inset-right));
+  left: auto;
+  transform: none;
+  align-items: stretch;
+  width: min(390px, calc(100vw - 32px));
+}
+
+.sn-toast {
+  --sn-toast-color: #2563eb;
+  --sn-toast-bg: #eff6ff;
+  --sn-toast-border: #bfdbfe;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 14px 42px 15px 15px;
+  overflow: hidden;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid var(--sn-toast-border);
+  border-left: 4px solid var(--sn-toast-color);
+  border-radius: 13px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .16), 0 2px 8px rgba(15, 23, 42, .08);
+  pointer-events: auto;
+  animation: sn-toast-enter 240ms cubic-bezier(.2,.75,.25,1) both;
+}
+
+.sn-toast-success { --sn-toast-color: #15803d; --sn-toast-bg: #f0fdf4; --sn-toast-border: #bbf7d0; }
+.sn-toast-error { --sn-toast-color: #dc2626; --sn-toast-bg: #fef2f2; --sn-toast-border: #fecaca; }
+.sn-toast-warning { --sn-toast-color: #b45309; --sn-toast-bg: #fffbeb; --sn-toast-border: #fde68a; }
+.sn-toast-info { --sn-toast-color: #2563eb; --sn-toast-bg: #eff6ff; --sn-toast-border: #bfdbfe; }
+
+.sn-toast-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--sn-toast-color);
+  background: var(--sn-toast-bg);
+  border-radius: 9px;
+}
+
+.sn-toast-copy { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.sn-toast-title { color: #0f172a; font-size: .9rem; line-height: 1.3; font-weight: 700; }
+.sn-toast-message { color: #475569; font-size: .82rem; line-height: 1.45; overflow-wrap: anywhere; }
+
+.sn-toast-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #64748b;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.sn-toast-close:hover { color: #0f172a; background: #f1f5f9; }
+.sn-toast-close:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.sn-toast-close svg { stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+
+.sn-toast-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--sn-toast-color);
+  transform-origin: left;
+  animation: sn-toast-progress linear forwards;
+}
+.sn-toast.is-closing { animation: sn-toast-exit 180ms ease-in forwards; }
+
+@keyframes sn-toast-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -24px, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes sn-toast-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -20px, 0) scale(0.96);
+  }
+}
+
+@keyframes sn-toast-progress {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .sn-toast-viewport {
+    top: max(16px, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
+    width: calc(100vw - 32px);
+    max-width: 420px;
+    max-height: min(50vh, 400px);
+  }
+
+  .sn-toast-viewport[data-app="admin"] {
+    top: max(76px, calc(env(safe-area-inset-top) + 64px));
+    right: max(10px, env(safe-area-inset-right));
+    left: max(10px, env(safe-area-inset-left));
+    transform: none;
+    width: auto;
+    max-height: min(45vh, 360px);
+  }
+
+  .sn-toast {
+    padding: 12px 40px 13px 12px;
+    gap: 10px;
+    border-radius: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sn-toast, .sn-toast.is-closing { animation-duration: 1ms; }
+  .sn-toast-progress { animation-duration: 1ms !important; }
+}

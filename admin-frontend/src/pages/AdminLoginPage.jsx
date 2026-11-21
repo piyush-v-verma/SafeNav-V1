@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdminAuth } from '../context/AdminAuthContext';
+import { useToast } from '../../../shared/toast/ToastProvider';
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
@@ -9,9 +10,16 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
 
   const { signIn, isConfigured, authError } = useAdminAuth();
+  const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || '/';
+
+  useEffect(() => {
+    if (location.state?.from) {
+      toast.warning('Administrator sign-in is required to view that page.', { dedupeKey: 'admin-login-required' });
+    }
+  }, [location.state, toast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -20,9 +28,21 @@ export default function AdminLoginPage() {
 
     try {
       await signIn(email, password);
+      toast.success('Administrator signed in.');
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err.message || 'Administrative authentication failed.');
+      const details = `${err?.code || ''} ${err?.message || ''}`.toLowerCase();
+      const message = details.includes('access denied') || details.includes('administrator privileges')
+        ? 'This account is not authorized for the admin console.'
+        : details.includes('invalid_credentials') || details.includes('invalid login credentials')
+          ? 'Email or password is incorrect.'
+          : details.includes('fetch') || details.includes('network')
+            ? 'Cannot reach the authentication service. Check your connection and try again.'
+            : details.includes('not configured')
+              ? 'Supabase is not configured for the admin app.'
+              : 'Administrative sign-in failed. Check your details and try again.';
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
